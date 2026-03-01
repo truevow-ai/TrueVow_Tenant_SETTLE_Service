@@ -1,0 +1,23 @@
+[
+  {
+    "jurisdiction": "Miami-Dade County, FL",
+    "case_type": "Motor Vehicle Accident",
+    "injury_category": ["Spinal Injury"],
+    "primary_diagnosis": null,
+    "treatment_type": [],
+    "duration_of_treatment": null,
+    "imaging_findings": [],
+    "medical_bills": 45000.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Unknown",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$50k-$100k",
+    "filing_year": 2023,
+    "source_url": "PASTE_COURT_RECORD_URL_HERE",
+    "case_reference": "MD-2023-XXXXX",
+    "collection_date": "2026-01-04T12:00:00",
+    "collector_notes": "MANUAL_COLLECTION - Add notes about this case"
+  }
+]
+

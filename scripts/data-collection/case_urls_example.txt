@@ -1,0 +1,8 @@
+# Example file for batch case URL extraction
+# Add one Casemine case URL per line
+# Lines starting with # are ignored
+#
+# Example:
+# https://www.casemine.com/judgments/...
+# https://www.casemine.com/judgments/...
+

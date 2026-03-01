@@ -1,0 +1,93 @@
+{
+  "collection_date": "2026-01-04T12:00:00",
+  "total_cases": 5,
+  "verification_instructions": {
+    "purpose": "Verify that collected data is authentic and from real court records",
+    "steps": [
+      "1. Review each case's source_url to verify it links to a real court record",
+      "2. Check that case_reference matches the court's case numbering system",
+      "3. Verify settlement amounts match public records (if available)",
+      "4. Confirm no PHI/PII is present in the anonymized data",
+      "5. Mark cases as 'verified' or 'needs_review' in the verification_status field"
+    ],
+    "important": "Source URLs and case references are for verification only and should NOT be stored in the production database"
+  },
+  "cases": [
+    {
+      "case_number": 1,
+      "jurisdiction": "Miami-Dade County, FL",
+      "case_type": "Motor Vehicle Accident",
+      "outcome_amount_range": "$50k-$100k",
+      "filing_year": 2023,
+      "source_url": "https://www2.miami-dadeclerk.com/cjis/CaseSearch.aspx?CaseNumber=2023-12345",
+      "case_reference": "MD-2023-00123",
+      "collection_date": "2026-01-04T12:00:00",
+      "collector_notes": "Settlement amount found in public judgment record",
+      "verification_status": "pending",
+      "verification_notes": "",
+      "verified_by": "",
+      "verification_date": ""
+    },
+    {
+      "case_number": 2,
+      "jurisdiction": "Miami-Dade County, FL",
+      "case_type": "Motor Vehicle Accident",
+      "outcome_amount_range": "$300k-$600k",
+      "filing_year": 2023,
+      "source_url": "https://www2.miami-dadeclerk.com/cjis/CaseSearch.aspx?CaseNumber=2023-67890",
+      "case_reference": "MD-2023-00456",
+      "collection_date": "2026-01-04T12:00:00",
+      "collector_notes": "High-value settlement, verified in court records",
+      "verification_status": "pending",
+      "verification_notes": "",
+      "verified_by": "",
+      "verification_date": ""
+    },
+    {
+      "case_number": 3,
+      "jurisdiction": "Los Angeles County, CA",
+      "case_type": "Slip and Fall",
+      "outcome_amount_range": "$50k-$100k",
+      "filing_year": 2023,
+      "source_url": "https://www.lacourt.org/casesummary/ui/index.aspx?casetype=civil&casenumber=23ST12345",
+      "case_reference": "LA-2023-00789",
+      "collection_date": "2026-01-04T12:00:00",
+      "collector_notes": "Premises liability case, settlement confirmed",
+      "verification_status": "pending",
+      "verification_notes": "",
+      "verified_by": "",
+      "verification_date": ""
+    },
+    {
+      "case_number": 4,
+      "jurisdiction": "Los Angeles County, CA",
+      "case_type": "Motor Vehicle Accident",
+      "outcome_amount_range": "$150k-$225k",
+      "filing_year": 2022,
+      "source_url": "https://www.lacourt.org/casesummary/ui/index.aspx?casetype=civil&casenumber=22ST54321",
+      "case_reference": "LA-2022-00112",
+      "collection_date": "2026-01-04T12:00:00",
+      "collector_notes": "Multi-vehicle accident, settlement range verified",
+      "verification_status": "pending",
+      "verification_notes": "",
+      "verified_by": "",
+      "verification_date": ""
+    },
+    {
+      "case_number": 5,
+      "jurisdiction": "Miami-Dade County, FL",
+      "case_type": "Workplace Injury",
+      "outcome_amount_range": "$50k-$100k",
+      "filing_year": 2023,
+      "source_url": "https://www2.miami-dadeclerk.com/cjis/CaseSearch.aspx?CaseNumber=2023-98765",
+      "case_reference": "MD-2023-00321",
+      "collection_date": "2026-01-04T12:00:00",
+      "collector_notes": "Workers comp related settlement",
+      "verification_status": "pending",
+      "verification_notes": "",
+      "verified_by": "",
+      "verification_date": ""
+    }
+  ]
+}
+

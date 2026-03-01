@@ -1,0 +1,27 @@
+[
+  {
+    "source_url": "https://www.casemine.com/caseiq",
+    "collected_at": "2026-01-10T02:28:32.616955",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "CaseIQ - AI based case research assistant | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  }
+]

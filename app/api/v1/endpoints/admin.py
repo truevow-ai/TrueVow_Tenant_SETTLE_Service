@@ -11,16 +11,14 @@ These endpoints are called by the SaaS Admin platform to manage:
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Optional, Dict
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
-from app.models.case_bank import (
-    ContributionResponse,
-    FoundingMember,
-    APIKeyResponse
-)
+from app.models.case_bank import ContributionResponse
+from app.models.api_keys import FoundingMember, APIKeyResponse
 from app.services.contributor import ContributionService
-from app.core.auth import get_admin_api_key  # TODO: Implement admin auth
+from app.core.auth import require_admin
+from app.core.database import get_db
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -34,7 +32,7 @@ logger = logging.getLogger(__name__)
 async def get_pending_contributions(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Get contributions pending admin review.
@@ -49,17 +47,45 @@ async def get_pending_contributions(
     - Total count for pagination
     """
     try:
-        # TODO: Implement actual database query
-        # contributor = ContributionService(db_connection=db)
-        # contributions = await contributor.get_pending_contributions(limit, offset)
+        logger.info(f"Admin {admin_data['user_id']} fetching pending contributions")
         
-        # Mock response for now
-        return {
-            "contributions": [],
-            "total": 0,
-            "limit": limit,
-            "offset": offset
-        }
+        # Get database connection
+        db = await get_db()
+        
+        if db:
+            # Query pending contributions
+            result = db.table('settle_contributions') \
+                .select('*') \
+                .eq('status', 'pending') \
+                .order('created_at', desc=True) \
+                .range(offset, offset + limit - 1) \
+                .execute()
+            
+            # Get total count
+            count_result = db.table('settle_contributions') \
+                .select('id', count='exact') \
+                .eq('status', 'pending') \
+                .execute()
+            
+            total = count_result.count if hasattr(count_result, 'count') else 0
+            
+            logger.info(f"Found {total} pending contributions")
+            
+            return {
+                "contributions": result.data if result.data else [],
+                "total": total,
+                "limit": limit,
+                "offset": offset
+            }
+        else:
+            # Mock mode or database unavailable
+            logger.warning("Database not available, returning mock data")
+            return {
+                "contributions": [],
+                "total": 0,
+                "limit": limit,
+                "offset": offset
+            }
     except Exception as e:
         logger.error(f"Error fetching pending contributions: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -71,7 +97,7 @@ async def get_pending_contributions(
 @router.get("/contributions/{contribution_id}")
 async def get_contribution_details(
     contribution_id: UUID,
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Get detailed information about a specific contribution.
@@ -82,11 +108,31 @@ async def get_contribution_details(
     - View blockchain hash
     """
     try:
-        # TODO: Implement actual database query
-        # contributor = ContributionService(db_connection=db)
-        # contribution = await contributor.get_contribution_by_id(contribution_id)
+        logger.info(f"Admin {admin_data['user_id']} fetching contribution {contribution_id}")
         
-        raise HTTPException(status_code=501, detail="Not yet implemented")
+        # Get database connection
+        db = await get_db()
+        
+        if db:
+            result = db.table('settle_contributions') \
+                .select('*') \
+                .eq('id', str(contribution_id)) \
+                .execute()
+            
+            if not result.data or len(result.data) == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"message": "Contribution not found", "contribution_id": str(contribution_id)}
+                )
+            
+            return result.data[0]
+        else:
+            # Mock mode
+            logger.warning("Database not available, returning 404")
+            raise HTTPException(
+                status_code=404,
+                detail={"message": "Contribution not found (database unavailable)", "contribution_id": str(contribution_id)}
+            )
     except HTTPException:
         raise
     except Exception as e:
@@ -100,8 +146,7 @@ async def get_contribution_details(
 @router.post("/contributions/{contribution_id}/approve")
 async def approve_contribution(
     contribution_id: UUID,
-    # admin_api_key: str = Depends(get_admin_api_key),  # TODO: Implement
-    # admin_user_id: UUID = Depends(get_admin_user_id)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Approve a contribution for inclusion in database.
@@ -118,20 +163,40 @@ async def approve_contribution(
     4. If Founding Member: Update their contribution count
     """
     try:
-        # TODO: Implement actual approval logic
-        # contributor = ContributionService(db_connection=db)
-        # success = await contributor.approve_contribution(
-        #     contribution_id=contribution_id,
-        #     approved_by=admin_user_id
-        # )
+        logger.info(f"Admin {admin_data['user_id']} approving contribution {contribution_id}")
         
-        logger.info(f"Contribution {contribution_id} approved by admin")
+        # Get database connection
+        db = await get_db()
+        
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        # Update contribution status
+        result = db.table('settle_contributions') \
+            .update({
+                'status': 'approved',
+                'approved_at': datetime.now(UTC).isoformat(),
+                'approved_by': admin_data['user_id']
+            }) \
+            .eq('id', str(contribution_id)) \
+            .execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(
+                status_code=404,
+                detail={"message": "Contribution not found", "contribution_id": str(contribution_id)}
+            )
+        
+        logger.info(f"Contribution {contribution_id} approved by admin {admin_data['user_id']}")
         
         return {
             "status": "approved",
             "contribution_id": str(contribution_id),
-            "approved_at": datetime.utcnow().isoformat()
+            "approved_at": datetime.now(UTC).isoformat(),
+            "message": "Contribution approved successfully"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error approving contribution {contribution_id}: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -144,8 +209,7 @@ async def approve_contribution(
 async def reject_contribution(
     contribution_id: UUID,
     reason: str = Query(..., description="Reason for rejection"),
-    # admin_api_key: str = Depends(get_admin_api_key),  # TODO: Implement
-    # admin_user_id: UUID = Depends(get_admin_user_id)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Reject a contribution (PII detected, invalid data, etc.).
@@ -163,22 +227,42 @@ async def reject_contribution(
     - "Antitrust violation: Contains defendant-specific information"
     """
     try:
-        # TODO: Implement actual rejection logic
-        # contributor = ContributionService(db_connection=db)
-        # success = await contributor.reject_contribution(
-        #     contribution_id=contribution_id,
-        #     reason=reason,
-        #     rejected_by=admin_user_id
-        # )
+        logger.warning(f"Admin {admin_data['user_id']} rejecting contribution {contribution_id}: {reason}")
         
-        logger.warning(f"Contribution {contribution_id} rejected: {reason}")
+        # Get database connection
+        db = await get_db()
+        
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        # Update contribution status
+        result = db.table('settle_contributions') \
+            .update({
+                'status': 'rejected',
+                'rejected_at': datetime.now(UTC).isoformat(),
+                'rejected_by': admin_data['user_id'],
+                'rejection_reason': reason
+            }) \
+            .eq('id', str(contribution_id)) \
+            .execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(
+                status_code=404,
+                detail={"message": "Contribution not found", "contribution_id": str(contribution_id)}
+            )
+        
+        logger.warning(f"Contribution {contribution_id} rejected by admin {admin_data['user_id']}: {reason}")
         
         return {
             "status": "rejected",
             "contribution_id": str(contribution_id),
             "reason": reason,
-            "rejected_at": datetime.utcnow().isoformat()
+            "rejected_at": datetime.now(UTC).isoformat(),
+            "message": "Contribution rejected successfully"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error rejecting contribution {contribution_id}: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -196,7 +280,7 @@ async def get_founding_members(
     status: Optional[str] = Query(None, description="Filter by status: active, inactive, suspended"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Get all Founding Members with contribution statistics.
@@ -234,7 +318,7 @@ async def get_founding_members(
 @router.get("/founding-members/{member_id}")
 async def get_founding_member_details(
     member_id: UUID,
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Get detailed information about a specific Founding Member.
@@ -303,7 +387,7 @@ async def update_founding_member_status(
 @router.get("/founding-members/contributions")
 async def get_founding_member_contributions(
     month: Optional[str] = Query(None, description="Month filter: YYYY-MM"),
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Get monthly contribution tracking for all Founding Members.
@@ -342,7 +426,7 @@ async def get_founding_member_contributions(
 async def create_api_key_for_tenant(
     tenant_id: UUID = Query(..., description="Tenant ID from SaaS Admin"),
     access_level: str = Query("standard", description="Access level: founding_member, standard, premium, external"),
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Create SETTLE API key for a tenant.
@@ -382,7 +466,7 @@ async def create_api_key_for_tenant(
 @router.get("/api-keys/{tenant_id}")
 async def get_tenant_api_key(
     tenant_id: UUID,
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Get tenant's SETTLE API key (for SaaS Admin reference).
@@ -408,7 +492,7 @@ async def get_tenant_api_key(
 @router.post("/api-keys/{key_id}/rotate")
 async def rotate_api_key(
     key_id: UUID,
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Rotate (regenerate) an API key.
@@ -438,7 +522,7 @@ async def rotate_api_key(
 @router.delete("/api-keys/{key_id}")
 async def revoke_api_key(
     key_id: UUID,
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Revoke (delete) an API key.
@@ -469,11 +553,66 @@ async def revoke_api_key(
 # ANALYTICS & REPORTING
 # ============================================================================
 
+@router.get("/analytics/dashboard")
+async def get_analytics_dashboard(
+    admin_data: dict = Depends(require_admin)
+) -> Dict:
+    """
+    Get comprehensive analytics dashboard.
+    
+    **SaaS Admin Use Case:**
+    - Display overview of SETTLE metrics
+    - Show Founding Member progress
+    - Track database growth
+    - Monitor query/report volume
+    """
+    try:
+        # TODO: Query actual database for metrics
+        return {
+            "founding_members": {
+                "total": 0,
+                "active": 0,
+                "capacity": 2100,
+                "slots_remaining": 2100
+            },
+            "contributions": {
+                "total": 0,
+                "approved": 0,
+                "pending": 0,
+                "flagged": 0,
+                "rejected": 0
+            },
+            "queries": {
+                "total": 0,
+                "today": 0,
+                "this_week": 0,
+                "this_month": 0
+            },
+            "reports": {
+                "total": 0,
+                "pdf": 0,
+                "json": 0,
+                "html": 0
+            },
+            "database": {
+                "jurisdictions_covered": 0,
+                "states_covered": 0,
+                "case_types": 0
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting analytics dashboard: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"message": "Internal server error", "error": str(e)}
+        )
+
+
 @router.get("/analytics/usage")
 async def get_usage_analytics(
     start_date: Optional[str] = Query(None, description="Start date: YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="End date: YYYY-MM-DD"),
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Get SETTLE service usage analytics.
@@ -507,7 +646,7 @@ async def get_usage_analytics(
 
 @router.get("/analytics/contributions")
 async def get_contribution_analytics(
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Get contribution statistics and analytics.
@@ -539,7 +678,7 @@ async def get_contribution_analytics(
 
 @router.get("/analytics/compliance")
 async def get_compliance_analytics(
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Get compliance monitoring metrics.
@@ -569,7 +708,7 @@ async def get_compliance_analytics(
 
 @router.get("/analytics/data-quality")
 async def get_data_quality_analytics(
-    # admin_api_key: str = Depends(get_admin_api_key)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Get data quality metrics.

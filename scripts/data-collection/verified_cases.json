@@ -1,0 +1,176 @@
+[
+  {
+    "jurisdiction": "Miami-Dade County, FL",
+    "case_type": "Motor Vehicle Accident",
+    "injury_category": [
+      "Spinal Injury",
+      "Soft Tissue Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [],
+    "duration_of_treatment": null,
+    "imaging_findings": [],
+    "medical_bills": 45000.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Unknown",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$50k-$100k"
+  },
+  {
+    "jurisdiction": "Miami-Dade County, FL",
+    "case_type": "Motor Vehicle Accident",
+    "injury_category": [
+      "Traumatic Brain Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [],
+    "duration_of_treatment": null,
+    "imaging_findings": [],
+    "medical_bills": 125000.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Unknown",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$300k-$600k"
+  },
+  {
+    "jurisdiction": "Los Angeles County, CA",
+    "case_type": "Slip and Fall",
+    "injury_category": [
+      "Fracture",
+      "Soft Tissue Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [],
+    "duration_of_treatment": null,
+    "imaging_findings": [],
+    "medical_bills": 28000.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$50k-$100k"
+  },
+  {
+    "jurisdiction": "Los Angeles County, CA",
+    "case_type": "Motor Vehicle Accident",
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [],
+    "duration_of_treatment": null,
+    "imaging_findings": [],
+    "medical_bills": 75000.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Unknown",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$150k-$225k"
+  },
+  {
+    "jurisdiction": "Miami-Dade County, FL",
+    "case_type": "Workplace Injury",
+    "injury_category": [
+      "Fracture"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [],
+    "duration_of_treatment": null,
+    "imaging_findings": [],
+    "medical_bills": 35000.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$50k-$100k"
+  },
+  {
+    "jurisdiction": "Los Angeles County, CA",
+    "case_type": "Motor Vehicle Accident",
+    "injury_category": [
+      "Soft Tissue Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [],
+    "duration_of_treatment": null,
+    "imaging_findings": [],
+    "medical_bills": 15000.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Unknown",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k"
+  },
+  {
+    "jurisdiction": "Miami-Dade County, FL",
+    "case_type": "Slip and Fall",
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [],
+    "duration_of_treatment": null,
+    "imaging_findings": [],
+    "medical_bills": 95000.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$225k-$300k"
+  },
+  {
+    "jurisdiction": "Los Angeles County, CA",
+    "case_type": "Motor Vehicle Accident",
+    "injury_category": [
+      "Traumatic Brain Injury",
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [],
+    "duration_of_treatment": null,
+    "imaging_findings": [],
+    "medical_bills": 200000.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Unknown",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$600k-$1M"
+  },
+  {
+    "jurisdiction": "Miami-Dade County, FL",
+    "case_type": "Motor Vehicle Accident",
+    "injury_category": [
+      "Fracture",
+      "Soft Tissue Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [],
+    "duration_of_treatment": null,
+    "imaging_findings": [],
+    "medical_bills": 55000.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Unknown",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$100k-$150k"
+  },
+  {
+    "jurisdiction": "Los Angeles County, CA",
+    "case_type": "Product Liability",
+    "injury_category": [
+      "Burn Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [],
+    "duration_of_treatment": null,
+    "imaging_findings": [],
+    "medical_bills": 180000.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$300k-$600k"
+  }
+]

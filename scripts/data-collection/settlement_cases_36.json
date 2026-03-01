@@ -1,0 +1,888 @@
+[
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914848badd7b049344b882d#34",
+    "collected_at": "2026-01-10T18:21:21.791098",
+    "collector_notes": "Scraped from Casemine.com (timeout during extraction)",
+    "verification_status": "pending",
+    "case_name": "Case from 5914848badd7b049344b882d#34",
+    "jurisdiction": "Unknown",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "defendant_category": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5a9a23a8342cca07244dff31#p_27",
+    "collected_at": "2026-01-10T18:22:04.383458",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "Beaubrun v. Geico Gen. Ins. Co.",
+    "court": "District Court of Appeal of Florida, Fourth District.,",
+    "jurisdiction": "Florida (Unknown County)",
+    "case_date": "Feb 28, 2018",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$1M+",
+    "extracted_amount": 4000000000000.0,
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "416 F.2d 1059"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914c42eadd7b049347cbd5b#p_10",
+    "collected_at": "2026-01-10T18:23:55.876229",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "UNITED STATES v. CITY OF MIAMI, FLA",
+    "court": "United States Court of Appeals, Fifth Circuit. Unit A.,",
+    "case_date": "October 14, 1980",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury",
+      "Fracture",
+      "Soft Tissue Injury",
+      "Burn Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "664 F.2d 435",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5e33b45a4653d0276c8638dd#p_5",
+    "collected_at": "2026-01-10T18:24:47.822773",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "Maher Law Firm, P.A. v. Daniel J. Newlin, P.A.",
+    "court": "United States Court of Appeals, Eleventh Circuit.,",
+    "case_date": "October 14, 1980",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury",
+      "Traumatic Brain Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "664 F.2d 435",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/59148622add7b049344d1121#9",
+    "collected_at": "2026-01-10T18:25:51.831516",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914f831add7b0493499a58b#p_80",
+    "collected_at": "2026-01-10T18:26:20.610824",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914789fadd7b049343e9466#36",
+    "collected_at": "2026-01-10T18:26:44.598733",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/59148b32add7b0493451e508#52",
+    "collected_at": "2026-01-10T18:27:05.731714",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914ba79add7b04934791099#p_45",
+    "collected_at": "2026-01-10T18:27:35.028976",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914b3a9add7b04934767942#p_94",
+    "collected_at": "2026-01-10T18:28:37.683072",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5d8cbeaf342cca2f5e1c3ae9#p_11",
+    "collected_at": "2026-01-10T18:29:07.011894",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/59147fb4add7b04934466344#p_17",
+    "collected_at": "2026-01-10T18:29:32.679451",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914c08dadd7b049347b46a7#p_26",
+    "collected_at": "2026-01-10T18:30:02.872691",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/591478f3add7b049343ef430#p_22",
+    "collected_at": "2026-01-10T18:30:26.575238",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/6340fd13feb20c33dafd9a0c#p_22",
+    "collected_at": "2026-01-10T18:31:30.058825",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914b713add7b0493477cfff",
+    "collected_at": "2026-01-10T18:31:52.704864",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/59147ce5add7b04934436722",
+    "collected_at": "2026-01-10T18:32:19.679385",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914881badd7b049344ee947",
+    "collected_at": "2026-01-10T18:32:42.952835",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914b61aadd7b04934776e44",
+    "collected_at": "2026-01-10T18:33:09.320747",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914999dadd7b0493461700a",
+    "collected_at": "2026-01-10T18:34:13.767734",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5e33b45a4653d0276c8638dd",
+    "collected_at": "2026-01-10T18:34:42.638287",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914e413add7b049348fe789",
+    "collected_at": "2026-01-10T18:35:12.596414",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914b36badd7b049347660ba",
+    "collected_at": "2026-01-10T21:36:47.210160",
+    "collector_notes": "Scraped from Casemine.com (error: Page.goto: net::ERR_NETWORK_IO_SUSPENDED at https://www.casemine.com/judgement/us/5914b36badd7b04934)",
+    "verification_status": "pending",
+    "case_name": "Case from 5914b36badd7b049347660ba",
+    "jurisdiction": "Unknown",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "defendant_category": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/59148673add7b049344d5fce",
+    "collected_at": "2026-01-11T00:43:32.547732",
+    "collector_notes": "Scraped from Casemine.com (timeout during extraction)",
+    "verification_status": "pending",
+    "case_name": "Case from 59148673add7b049344d5fce",
+    "jurisdiction": "Unknown",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "defendant_category": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/59146a9eadd7b049342ed88d",
+    "collected_at": "2026-01-11T00:44:32.394737",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "McCORMACK v. ANDRES",
+    "court": "Supreme Court of Montana.,",
+    "case_date": "May 28, 2008",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$300k-$600k",
+    "extracted_amount": 361684.0,
+    "injury_category": [
+      "Spinal Injury",
+      "Traumatic Brain Injury",
+      "Soft Tissue Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "182185 P.3d 973",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/59147e22add7b0493444af3d",
+    "collected_at": "2026-01-11T00:44:56.432128",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "MATTER OF WORCESTER INSURANCE CO. v. BETTENHAUSER",
+    "court": "Appellate Division of the Supreme Court of New York, Second Department.,",
+    "case_date": "Jun 20, 2000",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "extracted_amount": 10000.0,
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/59147448add7b0493439dd5b",
+    "collected_at": "2026-01-11T00:45:17.590269",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "ALLEN v. JAMES",
+    "court": "United States Court of Appeals, Fourth Circuit.,",
+    "case_date": "Jul 29, 2005",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$50k-$100k",
+    "extracted_amount": 75000.0,
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "259 F.3d 209",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/591483f6add7b049344afc65",
+    "collected_at": "2026-01-11T00:45:41.463475",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "REPUBLIC INS. CO. v. STOKER",
+    "court": "Supreme Court of Texas.,",
+    "case_date": "Jul 7, 1995",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$0-$50k",
+    "extracted_amount": 5000.0,
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "838 P.2d 1265",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914ba3eadd7b0493478fc97",
+    "collected_at": "2026-01-11T00:46:06.548668",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "NADDEO v. ALLSTATE INS. CO",
+    "court": "Supreme Court of North Carolina,",
+    "case_date": "Aug 1, 2000",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$225k-$300k",
+    "extracted_amount": 250000.0,
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "62 F.3d 619",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/59147c01add7b0493442753c",
+    "collected_at": "2026-01-11T00:47:20.528966",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914e5d2add7b04934908f8d",
+    "collected_at": "2026-01-11T00:47:48.317477",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914bcb3add7b0493479e1c3",
+    "collected_at": "2026-01-11T00:48:08.702705",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914759aadd7b049343b34e8",
+    "collected_at": "2026-01-11T00:48:31.726369",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5975bd9dadd7b0434968aa52",
+    "collected_at": "2026-01-11T00:49:00.701149",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914b153add7b04934758990",
+    "collected_at": "2026-01-11T00:50:02.176398",
+    "collector_notes": "Scraped from Casemine.com (CAPTCHA detected but extraction attempted)",
+    "verification_status": "pending",
+    "case_name": "Captcha | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  }
+]

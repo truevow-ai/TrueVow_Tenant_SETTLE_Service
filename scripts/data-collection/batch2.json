@@ -1,0 +1,135 @@
+[
+  {
+    "source_url": "https://www.casemine.com/judgement/us/695fa519af858ec317c80444",
+    "collected_at": "2026-01-10T05:38:23.603167",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "GHAYOORI v. SULTANATE OF OMAN",
+    "court": "States District Court",
+    "case_date": "Jan 7, 2026",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$1M+",
+    "extracted_amount": 65000000.0,
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "782 F.3d 9",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/6960fd3c827d4c0685d56235",
+    "collected_at": "2026-01-10T05:38:38.861611",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "PIW TSG, LLC v. Kerr Contractors, Inc.",
+    "court": "State Supreme Court",
+    "case_date": "Jan 7, 2026",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury",
+      "Burn Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "250 F.3d 729",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/6960e2e841a75857bc299a86",
+    "collected_at": "2026-01-10T05:38:54.762342",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "Dearden v. Burlington Opco",
+    "court": "The Supreme Court",
+    "case_date": "Jan 8, 2026",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/6960ea2241a75857bc299b4e",
+    "collected_at": "2026-01-10T05:39:21.041164",
+    "collector_notes": "Scraped from Casemine.com (timeout during extraction)",
+    "verification_status": "pending",
+    "case_name": "Case from 6960ea2241a75857bc299b4e",
+    "jurisdiction": "Unknown",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "defendant_category": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/6960ea1841a75857bc299b4a",
+    "collected_at": "2026-01-10T05:39:36.417359",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "P. v. Doucet",
+    "court": "State Supreme Court",
+    "case_date": "Jan 8, 2026",
+    "case_type": "Personal Injury",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$0-$50k",
+    "extracted_amount": 1191.0,
+    "injury_category": [
+      "Spinal Injury",
+      "Fracture",
+      "Burn Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown"
+  }
+]

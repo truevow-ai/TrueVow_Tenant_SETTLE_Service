@@ -1,0 +1,413 @@
+[
+  {
+    "source_url": "https://www.casemine.com/judgement/us/6960ea2241a75857bc299b4e",
+    "collected_at": "2026-01-10T04:08:34.263775",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "Meza v. Shah",
+    "court": "State Supreme Court",
+    "case_date": "Jan 8, 2026",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury",
+      "Fracture"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Pain Management",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Fracture",
+      "Herniated Disc",
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/6960edd341a75857bc299c4d",
+    "collected_at": "2026-01-10T04:08:52.185592",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "Chong v. Mardirossian Akaragian LLP",
+    "court": "State Supreme Court",
+    "case_date": "Jan 8, 2026",
+    "case_type": "Personal Injury",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$1M+",
+    "extracted_amount": 6015000000000.0,
+    "injury_category": [
+      "Spinal Injury",
+      "Traumatic Brain Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "47 F.3d 1176",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/6960fc04827d4c0685d56196",
+    "collected_at": "2026-01-10T04:09:08.172967",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "Barringer v. Progressive Select Insurance Company",
+    "court": "State Supreme Court",
+    "case_date": "Jan 7, 2026",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$300k-$600k",
+    "extracted_amount": 300000.0,
+    "injury_category": [
+      "Spinal Injury",
+      "Fracture"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Fracture",
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "741 F.3d 480",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/695fc8d2f7a3416bb34da0f6",
+    "collected_at": "2026-01-10T04:09:24.003409",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "Savannah Cook v. Travis Herduin",
+    "court": "Iowa District Court",
+    "case_date": "Jan 7, 2026",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$1M+",
+    "extracted_amount": 887000000000.0,
+    "injury_category": [
+      "Spinal Injury",
+      "Traumatic Brain Injury",
+      "Soft Tissue Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Chiropractic",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": 887000.0,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/695fdad7f7a3416bb34da259",
+    "collected_at": "2026-01-10T04:09:40.601489",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "State v. Handy",
+    "court": "The Supreme Court",
+    "case_date": "Jan 7, 2026",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury",
+      "Burn Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "312 A.3d 674",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/caseiq",
+    "collected_at": "2026-01-10T04:12:35.650808",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "CaseIQ - AI based case research assistant | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/caseiq",
+    "collected_at": "2026-01-10T04:32:10.042512",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "CaseIQ - AI based case research assistant | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/caseiq",
+    "collected_at": "2026-01-10T05:45:40.146674",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "CaseIQ - AI based case research assistant | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/69583e5653e270b605da9be9",
+    "collected_at": "2026-01-10T06:02:53.935027",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "HARTSEK v. STATE FARM MUTUAL AUTOMOBILE INSURANCE COMPANY",
+    "court": "Allegheny County Court",
+    "case_date": "Dec 31, 2025",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$300k-$600k",
+    "extracted_amount": 500000.0,
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "4\nF.3d 137",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/695cf41c9822e34e127f96ef",
+    "collected_at": "2026-01-10T06:03:07.927408",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "DANIELS v. MAIN HIGHWAY LOGISTICS LLC",
+    "court": "States District Court",
+    "case_date": "Dec 31, 2025",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "910 F.3d 1345",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/6960e2db41a75857bc299a82",
+    "collected_at": "2026-01-10T06:03:24.349690",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "Liable v. Bower",
+    "court": "Vermont Supreme Court",
+    "case_date": "Jan 8, 2026",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "659 A.2d 1129",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/695f9bc6dd0c5cac235e172a",
+    "collected_at": "2026-01-10T06:03:37.143941",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "State v. Lindholm",
+    "court": "County Circuit Court",
+    "case_date": "Jan 7, 2026",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "964 P2d 990",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/6960fc04827d4c0685d56196",
+    "collected_at": "2026-01-10T06:03:49.392294",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "Barringer v. Progressive Select Insurance Company",
+    "court": "State Supreme Court",
+    "case_date": "Jan 7, 2026",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$300k-$600k",
+    "extracted_amount": 300000.0,
+    "injury_category": [
+      "Spinal Injury",
+      "Fracture"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Fracture",
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "741 F.3d 480",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/caseiq",
+    "collected_at": "2026-01-10T06:06:34.552632",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "CaseIQ - AI based case research assistant | CaseMine",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown",
+    "case_date": null
+  }
+]

@@ -1,0 +1,277 @@
+[
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914848badd7b049344b882d#34",
+    "collected_at": "2026-01-10T08:47:18.895130",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "ST. PAUL FIRE MARINE INS. v. SHURE",
+    "court": "District Court of Appeal of Florida, Fourth District.,",
+    "jurisdiction": "Florida (Unknown County)",
+    "case_date": "Jan 24, 1995",
+    "case_type": "Medical Malpractice",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$1M+",
+    "extracted_amount": 3000000.0,
+    "injury_category": [
+      "Spinal Injury",
+      "Burn Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "862 P.2d 978"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5a9a23a8342cca07244dff31#p_27",
+    "collected_at": "2026-01-10T08:47:56.390163",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "Beaubrun v. Geico Gen. Ins. Co.",
+    "court": "District Court of Appeal of Florida, Fourth District.,",
+    "jurisdiction": "Florida (Unknown County)",
+    "case_date": "Feb 28, 2018",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$1M+",
+    "extracted_amount": 4000000000000.0,
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "416 F.2d 1059"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914c42eadd7b049347cbd5b#p_10",
+    "collected_at": "2026-01-10T08:49:23.372355",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "UNITED STATES v. CITY OF MIAMI, FLA",
+    "court": "United States Court of Appeals, Fifth Circuit. Unit A.,",
+    "case_date": "October 14, 1980",
+    "case_type": "Personal Injury",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury",
+      "Fracture",
+      "Soft Tissue Injury",
+      "Burn Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "664 F.2d 435",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5e33b45a4653d0276c8638dd#p_5",
+    "collected_at": "2026-01-10T08:50:32.891770",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "Maher Law Firm, P.A. v. Daniel J. Newlin, P.A.",
+    "court": "United States Court of Appeals, Eleventh Circuit.,",
+    "case_date": "October 14, 1980",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury",
+      "Traumatic Brain Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "664 F.2d 435",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914b713add7b0493477cfff",
+    "collected_at": "2026-01-10T08:58:21.939383",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "IHS CEDARS TREATMENT CTR OF DESOTO v. MASON",
+    "court": "Supreme Court of Texas.,",
+    "case_date": "Jun 18, 2004",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/59147ce5add7b04934436722",
+    "collected_at": "2026-01-10T08:58:58.187612",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "BLUE DIAMOND COAL CO. v. TRUSTEES OF UMWA",
+    "court": "U.S. Supreme Court,",
+    "case_date": "May 3, 2001",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$1M+",
+    "extracted_amount": 14613798080000.0,
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "249 F.3d 519",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914881badd7b049344ee947",
+    "collected_at": "2026-01-10T08:59:28.823127",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "HARTFORD ACC. IND. v. WESOLOWSKI",
+    "court": "Court of Appeals of the State of New York.,",
+    "case_date": "Nov 21, 1973",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "extracted_amount": 20000.0,
+    "injury_category": [
+      "Fracture"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914b61aadd7b04934776e44",
+    "collected_at": "2026-01-10T09:00:05.652130",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "ALLIANZ INS. CO. v. LERNER",
+    "court": "United States Court of Appeals, Second Circuit.,",
+    "case_date": "Aug 2, 2005",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$300k-$600k",
+    "extracted_amount": 495000.0,
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "416 F.3d 109",
+    "jurisdiction": "Unknown"
+  },
+  {
+    "source_url": "https://www.casemine.com/judgement/us/5914999dadd7b0493461700a",
+    "collected_at": "2026-01-10T09:01:13.246966",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "MUHE v. MITCHELL",
+    "court": "Supreme Court of Colorado.\nIn Department.\n,",
+    "case_date": "Jun 17, 1968",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Settlement",
+    "outcome_amount_range": "$0-$50k",
+    "extracted_amount": 45000.0,
+    "injury_category": [
+      "Spinal Injury"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Physical Therapy",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Contusion",
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "citation": "108442 P.2d 418",
+    "jurisdiction": "Unknown"
+  }
+]

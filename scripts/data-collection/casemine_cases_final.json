@@ -1,0 +1,35 @@
+[
+  {
+    "source_url": "https://www.casemine.com/judgement/us/6960ea2241a75857bc299b4e",
+    "collected_at": "2026-01-10T03:07:19.468601",
+    "collector_notes": "Scraped from Casemine.com",
+    "verification_status": "pending",
+    "case_name": "Meza v. Shah",
+    "court": "State Supreme Court",
+    "case_date": "Jan 8, 2026",
+    "case_type": "Motor Vehicle Accident",
+    "outcome_type": "Jury Verdict",
+    "outcome_amount_range": "$0-$50k",
+    "injury_category": [
+      "Spinal Injury",
+      "Fracture"
+    ],
+    "primary_diagnosis": null,
+    "treatment_type": [
+      "Surgery",
+      "Physical Therapy",
+      "Pain Management",
+      "Emergency Treatment"
+    ],
+    "imaging_findings": [
+      "Fracture",
+      "Herniated Disc",
+      "Laceration"
+    ],
+    "medical_bills": 0.0,
+    "lost_wages": null,
+    "policy_limits": null,
+    "defendant_category": "Business",
+    "jurisdiction": "Unknown"
+  }
+]
