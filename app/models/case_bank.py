@@ -3,7 +3,7 @@ Case Bank Data Models - Settlement Contributions and Queries
 """
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import datetime, UTC
 from uuid import UUID
 
@@ -118,7 +118,19 @@ class EstimateResponse(BaseModel):
     
     # Metadata
     n_cases: int = Field(..., description="Number of comparable cases")
-    confidence: str = Field(..., description="low, medium, high")
+    confidence: str = Field(..., description="low, medium, high, insufficient_data")
+
+    # Year-2 "Never Sell Empty Dashboards" guardrail — set by IntelligenceGate.
+    # When True, UI MUST hide every widget listed in `suppressed_features`
+    # and render only the user's own case data.
+    own_case_only: bool = Field(
+        default=False,
+        description="If True, caller must suppress aggregate charts (n<50 floor).",
+    )
+    suppressed_features: List[str] = Field(
+        default_factory=list,
+        description="Dashboard widgets the caller MUST hide when own_case_only=True.",
+    )
     
     # Comparable cases (for report)
     comparable_cases: List[ComparableCase] = Field(
@@ -163,7 +175,35 @@ class ContributionRequest(BaseModel):
     # Step 5: Outcome
     outcome_type: str = Field(..., description="Outcome type (Settlement, Verdict, etc.)")
     outcome_amount_range: str = Field(..., description="Bucketed outcome range")
-    
+
+    # Year-2 Mandatory 8-field Intake (v2) ----------------------------------
+    # Jurisdiction (field #1) is defined above. These 7 complete the schema.
+    intake_version_id: Literal["v2"] = Field(
+        "v2", description="Schema version tag. Always 'v2' for /submit traffic."
+    )
+    economic_strength_at_intake: Literal["weak", "moderate", "strong"] = Field(
+        ..., description="Economic damages strength at intake (mandatory)."
+    )
+    final_treatment_escalation: Literal[
+        "none", "pt_only", "injections", "surgery_consult", "surgery_performed"
+    ] = Field(..., description="Highest treatment escalation reached.")
+    settlement_band: Literal[
+        "under_50k", "50k_150k", "150k_500k", "500k_1m", "over_1m"
+    ] = Field(
+        ...,
+        description="Outcome band (separate from legacy outcome_amount_range).",
+    )
+    policy_limit_known: bool = Field(
+        ..., description="Whether defendant policy limits were disclosed."
+    )
+    time_to_resolution: Literal[
+        "lt_6_months", "6_12_months", "12_24_months", "gt_24_months"
+    ] = Field(..., description="Calendar time from intake to resolution.")
+    litigation_filed: bool = Field(
+        ..., description="Was a complaint filed? (vs pre-suit settlement)"
+    )
+    # -----------------------------------------------------------------------
+
     # Compliance
     consent_confirmed: bool = Field(True, description="Attorney confirms ethical compliance")
     

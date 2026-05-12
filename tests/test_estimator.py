@@ -5,26 +5,42 @@ Unit tests for Settlement Estimator Service
 import pytest
 from uuid import uuid4
 from datetime import datetime, timedelta, UTC
+from unittest.mock import MagicMock, AsyncMock
 
 from app.services.estimator import SettlementEstimator
+from app.services.intelligence_gate import AggregateGateResult, MIN_AGGREGATE_N
 from app.models.case_bank import EstimateRequest, SettleContribution
+
+
+def _sufficient_gate(n: int = 120) -> MagicMock:
+    """Stub IntelligenceGate that always returns sufficient — lets the
+    percentile branch run against the estimator's mock cases."""
+    stub = MagicMock()
+    stub.check = AsyncMock(return_value=AggregateGateResult(
+        status="sufficient",
+        n=n,
+        threshold=MIN_AGGREGATE_N,
+        own_case_only=False,
+        suppressed_features=[],
+    ))
+    return stub
 
 
 @pytest.mark.asyncio
 async def test_estimator_with_sufficient_cases():
     """Test estimator with >=15 cases (percentile calculation)"""
-    
-    estimator = SettlementEstimator()
-    
+
+    estimator = SettlementEstimator(gate=_sufficient_gate())
+
     request = EstimateRequest(
         jurisdiction="Maricopa County, AZ",
         case_type="Auto Accident",
         injury_category=["Spinal Injury", "Back Injury"],
         medical_bills=50000.00
     )
-    
+
     response = await estimator.estimate_settlement_range(request)
-    
+
     # Assertions
     assert response.n_cases >= 15, "Should have at least 15 cases"
     assert response.confidence in ["medium", "high"]
@@ -84,9 +100,9 @@ def test_multiplier_ranges():
 @pytest.mark.asyncio
 async def test_response_time():
     """Test that estimator responds within 1 second"""
-    
-    estimator = SettlementEstimator()
-    
+
+    estimator = SettlementEstimator(gate=_sufficient_gate())
+
     request = EstimateRequest(
         jurisdiction="Maricopa County, AZ",
         case_type="Auto Accident",

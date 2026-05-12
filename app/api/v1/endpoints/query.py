@@ -9,8 +9,9 @@ import logging
 from app.models.case_bank import EstimateRequest, EstimateResponse
 from app.services.estimator import SettlementEstimator
 from app.services.validator import DataValidator
-from app.core.auth import require_any_auth
+from app.core.auth import require_any_auth, require_unified_auth, AuthContext
 from app.core.database import get_db
+from app.core.event_emitter import SettleEventEmitter
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -19,10 +20,15 @@ logger = logging.getLogger(__name__)
 @router.post("/estimate", response_model=EstimateResponse)
 async def estimate_settlement_range(
     request: EstimateRequest,
-    api_key_data: dict = Depends(require_any_auth)
+    auth: AuthContext = Depends(require_unified_auth)
 ):
     """
     Estimate settlement range based on comparable cases.
+    
+    **Authentication:**
+    - Supports API Key (legacy): Authorization: Bearer settle_xxx
+    - Supports Clerk JWT: Authorization: Bearer eyJxxx
+    - Both methods provide user_id and optional tenant_id for audit
     
     **Algorithm:**
     - Queries database for comparable cases (jurisdiction, case type, injury)
@@ -40,10 +46,12 @@ async def estimate_settlement_range(
     - All data is anonymized
     """
     try:
-        # Log authenticated user
+        # Log authenticated user (supports both API Key and Clerk JWT)
         logger.info(
-            f"Estimate request from user={api_key_data['user_id']}, "
-            f"access_level={api_key_data['access_level']}"
+            f"Estimate request from user={auth.user_id}, "
+            f"auth_method={auth.auth_method}, "
+            f"scope={auth.scope}, "
+            f"tenant_id={auth.tenant_id}"
         )
         
         # Validate query request
@@ -73,6 +81,20 @@ async def estimate_settlement_range(
             f"confidence={response.confidence}, response_time={response.response_time_ms}ms"
         )
         
+        # ── Behavioral event ─────────────────────────────────────────────────
+        emitter = SettleEventEmitter(
+            tenant_id=getattr(auth, "tenant_id", None),
+            user_id=getattr(auth, "user_id", None),
+        )
+        import asyncio
+        asyncio.ensure_future(emitter.emit(
+            "settlement_query_run",
+            metadata={
+                "jurisdiction": request.jurisdiction,
+                "confidence": response.confidence,
+                "n_cases": response.n_cases,
+            },
+        ))
         return response
         
     except HTTPException:

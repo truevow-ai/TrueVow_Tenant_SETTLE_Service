@@ -12,11 +12,17 @@ from typing import List, Tuple, Optional, Dict
 from datetime import datetime, UTC
 import logging
 
+from pydantic import ValidationError
+
 from app.models.case_bank import (
     EstimateRequest,
     EstimateResponse,
     ComparableCase,
     SettleContribution
+)
+from app.services.intelligence_gate import (
+    IntelligenceGate,
+    SUPPRESSED_WHEN_INSUFFICIENT,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,14 +54,17 @@ class SettlementEstimator:
         "low": 0        # <15 cases = low confidence (use multipliers)
     }
     
-    def __init__(self, db_connection=None):
+    def __init__(self, db_connection=None, gate: Optional["IntelligenceGate"] = None):
         """
         Initialize estimator with database connection.
-        
+
         Args:
-            db_connection: Database connection for querying contributions
+            db_connection: Database connection for querying contributions.
+            gate: Optional injected IntelligenceGate (primarily for tests).
+                  Defaults to a gate wired to the same db_connection.
         """
         self.db = db_connection
+        self.gate = gate or IntelligenceGate(db_connection)
     
     async def estimate_settlement_range(
         self,
@@ -71,23 +80,50 @@ class SettlementEstimator:
             EstimateResponse with percentile ranges and comparable cases
         """
         start_time = datetime.now(UTC)
-        
-        # Step 1: Query comparable cases
+
+        # Year-2 "Never Sell Empty Dashboards" gate — runs BEFORE we query.
+        # If fewer than MIN_AGGREGATE_N approved rows match, we short-circuit
+        # to own-case-only. No multiplier fallback — synthesizing a range from
+        # zero comparable cases is exactly the anti-pattern this gate blocks.
+        gate_result = await self.gate.check(
+            jurisdiction=request.jurisdiction,
+            case_type=request.case_type,
+        )
+        if gate_result.status == "insufficient_data":
+            response_time_ms = int(
+                (datetime.now(UTC) - start_time).total_seconds() * 1000
+            )
+            logger.info(
+                "Estimator short-circuit: insufficient_data for %s (n=%d, floor=%d)",
+                request.jurisdiction, gate_result.n, gate_result.threshold,
+            )
+            return EstimateResponse(
+                percentile_25=0.0,
+                median=0.0,
+                percentile_75=0.0,
+                percentile_95=0.0,
+                n_cases=gate_result.n,
+                confidence="insufficient_data",
+                own_case_only=True,
+                suppressed_features=list(SUPPRESSED_WHEN_INSUFFICIENT),
+                comparable_cases=[],
+                range_justification=(
+                    f"Insufficient approved data in {request.jurisdiction} "
+                    f"(n={gate_result.n}, floor={gate_result.threshold}). "
+                    f"Aggregate ranges suppressed per Year-2 credibility policy."
+                ),
+                response_time_ms=response_time_ms,
+            )
+
+        # Step 1: Query comparable cases (gate already passed, so n>=50)
         comparable_cases = await self._query_comparable_cases(request)
-        
-        # Step 2: Calculate ranges
-        if len(comparable_cases) >= self.CONFIDENCE_THRESHOLDS["medium"]:
-            # Sufficient data: Use percentile calculation
-            ranges, confidence = self._calculate_percentile_ranges(
-                comparable_cases,
-                request.medical_bills
-            )
-        else:
-            # Insufficient data: Use multiplier fallback
-            ranges, confidence = self._calculate_multiplier_ranges(
-                request.medical_bills,
-                len(comparable_cases)
-            )
+
+        # Step 2: Calculate ranges via percentile method.
+        # Multiplier fallback is retired — see _calculate_multiplier_ranges TODO.
+        ranges, confidence = self._calculate_percentile_ranges(
+            comparable_cases,
+            request.medical_bills
+        )
         
         # Step 3: Select representative comparable cases for report
         sample_cases = self._select_representative_cases(comparable_cases, limit=10)
@@ -116,34 +152,91 @@ class SettlementEstimator:
         )
     
     async def _query_comparable_cases(
-        self,
-        request: EstimateRequest
+        self, request: EstimateRequest
     ) -> List[SettleContribution]:
+        """Query approved comparable cases from settle_contributions.
+
+        Filters: same state (parsed from jurisdiction), same case_type,
+        overlapping injury_category (array-contains), status='approved'.
+        Returns at most 50 most recent cases.
+
+        Falls back to _generate_mock_cases() when self.db is None — preserves
+        current behavior until SETTLE_USE_MOCK_DATA is flipped to false.
         """
-        Query database for comparable cases.
-        
-        Matching criteria (in order of priority):
-        1. Jurisdiction (county + state)
-        2. Case type (if provided)
-        3. Injury category/type
-        4. Medical bills range (±50%)
-        5. Status = 'approved' only
-        
-        Args:
-            request: Estimate request
-            
-        Returns:
-            List of comparable cases (SettleContribution objects)
-        """
-        # TODO: Implement actual database query
-        # For now, return mock data for testing
-        
-        logger.info(f"Querying comparable cases for {request.jurisdiction}")
-        
-        # Mock comparable cases (replace with real DB query)
-        mock_cases = self._generate_mock_cases(request)
-        
-        return mock_cases
+        # Mock fallback — preserves current behavior when DB client isn't wired
+        if self.db is None:
+            logger.info(
+                "_query_comparable_cases: self.db is None, falling back to mock"
+            )
+            return self._generate_mock_cases(request)
+
+        # Parse state from jurisdiction (e.g. "Miami-Dade County, FL" -> "FL")
+        try:
+            state = request.jurisdiction.rsplit(",", 1)[1].strip()
+        except (IndexError, AttributeError) as e:
+            logger.warning(
+                f"_query_comparable_cases: malformed jurisdiction "
+                f"{request.jurisdiction!r}: {e}. Falling back to mock."
+            )
+            return self._generate_mock_cases(request)
+
+        if not state:
+            logger.warning(
+                f"_query_comparable_cases: empty state extracted from "
+                f"{request.jurisdiction!r}. Falling back to mock."
+            )
+            return self._generate_mock_cases(request)
+
+        # Build query: approved + state-suffix + case_type + overlapping injury_category
+        try:
+            query = (
+                self.db.table("settle_contributions")
+                .select("*")
+                .eq("status", "approved")
+                .eq("case_type", request.case_type)
+                .ilike("jurisdiction", f"%, {state}")
+            )
+
+            # Array-contains: only rows where injury_category contains ALL
+            # requested categories. Skip filter when request list is empty.
+            if request.injury_category:
+                query = query.cs("injury_category", request.injury_category)
+
+            # Cap at 50 most recent (statistical ceiling for percentile calc)
+            query = query.order("created_at", desc=True).limit(50)
+
+            response = query.execute()  # synchronous per SupabaseRESTQuery contract
+            rows = response.data or []
+
+        except Exception as e:
+            logger.exception(
+                f"_query_comparable_cases: query failed "
+                f"(state={state}, case_type={request.case_type!r}, "
+                f"injury_category={request.injury_category}): {e}. "
+                f"Falling back to mock."
+            )
+            return self._generate_mock_cases(request)
+
+        logger.info(
+            f"_query_comparable_cases: returned {len(rows)} rows "
+            f"(state={state}, case_type={request.case_type!r}, "
+            f"injury_category={request.injury_category})"
+        )
+
+        # Convert rows to SettleContribution (direct path confirmed by Stage 2.3b.1 probe).
+        # Pydantic v2 silently drops the 13 extra audit columns; missing
+        # `contributor_api_key_id` defaults to None.
+        comparable_cases: List[SettleContribution] = []
+        for row in rows:
+            try:
+                comparable_cases.append(SettleContribution(**row))
+            except ValidationError as e:
+                logger.warning(
+                    f"_query_comparable_cases: skipping malformed row "
+                    f"(id={row.get('id', '?')}): {e}"
+                )
+
+        return comparable_cases
     
     def _calculate_percentile_ranges(
         self,
@@ -216,7 +309,12 @@ class SettlementEstimator:
     ) -> Tuple[Dict[str, float], str]:
         """
         Calculate settlement ranges using multiplier fallback method.
-        
+
+        TODO Year-2: RETIRED. The IntelligenceGate now short-circuits any
+        request with n<50 to own_case_only instead of synthesizing a range
+        from industry multipliers. Kept here only to avoid a churny diff;
+        remove once all callers are audited.
+
         Used when insufficient comparable cases (<15).
         
         Algorithm:
