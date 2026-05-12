@@ -2,15 +2,34 @@
 Application Configuration
 
 Loads environment variables and provides configuration settings.
+
+Security: AUTH_MODE must be 'clerk' in production per TrueVow Security Contract v1
 """
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Optional
 import os
+from pathlib import Path
+
+# Load .env.local or .env file explicitly before Settings class is used
+# Uses absolute resolved path so it works regardless of CWD
+_env_file = Path(__file__).resolve().parent.parent.parent / ".env.local"
+if not _env_file.exists():
+    _env_file = Path(__file__).resolve().parent.parent.parent / ".env"
+if _env_file.exists():
+    from dotenv import load_dotenv
+    load_dotenv(_env_file)
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
+    
+    model_config = SettingsConfigDict(
+        env_file=".env.local",  # Use .env.local (primary) - falls back to .env if not found
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore"
+    )
     
     # Application (supports both SETTLE_ prefix and unprefixed)
     SETTLE_APP_NAME: Optional[str] = None
@@ -24,6 +43,16 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
     LOG_LEVEL: str = "INFO"
+    
+    # Security - Auth Mode (TrueVow Security Contract v1)
+    # Must be 'clerk' in production
+    AUTH_MODE: str = "local"  # "local" for dev, "clerk" for production
+    PERMISSION_FAIL_OPEN: bool = False  # Only true in dev for testing
+    
+    # Service Registry
+    SERVICE_REGISTRY_ENABLED: bool = True
+    SERVICE_REGISTRY_URL: str = "http://localhost:3006"
+    SERVICE_HEARTBEAT_INTERVAL_S: int = 300  # 5 minutes
     
     # Server (supports both SETTLE_ prefix and unprefixed)
     SETTLE_HOST: Optional[str] = None
@@ -242,6 +271,10 @@ class Settings(BaseSettings):
         """Get Platform Service API key (supports multiple names)"""
         return self.PLATFORM_SERVICE_API_KEY or self.SAAS_ADMIN_API_KEY
     
+    # SaaS Admin Service (for behavioral event emitting)
+    SAAS_ADMINISTRATION_SERVICE_URL: str = "http://localhost:3001"
+    SAAS_ADMINISTRATION_SERVICE_API_KEY: Optional[str] = None
+    
     # Internal Ops Service (Task Management, Time Tracking, Notifications)
     INTERNAL_OPS_SERVICE_URL: str = "http://localhost:3001"
     INTERNAL_OPS_SERVICE_API_KEY: Optional[str] = None
@@ -290,7 +323,7 @@ class Settings(BaseSettings):
     SETTLE_USE_MOCK_DATA: Optional[bool] = None
     SETTLE_SKIP_AUTH: Optional[bool] = None
     
-    USE_MOCK_DATA: bool = True
+    USE_MOCK_DATA: bool = False
     SKIP_AUTH: bool = False
     
     @property
