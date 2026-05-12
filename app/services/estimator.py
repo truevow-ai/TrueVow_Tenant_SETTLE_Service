@@ -2,7 +2,8 @@
 Settlement Range Estimator Service
 
 Core algorithm for calculating settlement ranges based on comparable cases.
-Uses percentile-based calculation (25th, median, 75th, 95th) with multiplier fallback.
+Gated by IntelligenceGate (Year-2 Credible Aggregation floor); returns percentile-based
+range when cohort credibility threshold is met, suppressed response otherwise.
 
 Reference: Part 7, Section 7.5 of Technical Documentation
 """
@@ -33,11 +34,19 @@ class SettlementEstimator:
     Settlement Range Estimator using percentile-based calculation.
     
     Algorithm:
-    1. Query database for comparable cases (jurisdiction, case type, injury)
-    2. If >= 15 cases: Calculate percentiles (25th, median, 75th, 95th)
-    3. If < 15 cases: Use multiplier fallback (medical bills * industry multipliers)
-    4. Assign confidence level: high (30+), medium (15-29), low (<15)
-    5. Return range with comparable cases
+    1. Query IntelligenceGate to verify (jurisdiction, case_type) cohort
+       credibility against MIN_AGGREGATE_N=50 floor.
+    2. If gate returns `sufficient`: query comparable cases (state-suffix +
+       case_type + injury_category overlap), compute percentiles
+       (25th, median, 75th, 95th), return full estimate.
+    3. If gate returns `insufficient_data`: return suppressed response with
+       own_case_only=True and aggregate widgets blocked. No multiplier
+       fallback — synthesizing ranges from sub-threshold data is the
+       anti-pattern this gate exists to prevent.
+    4. Confidence label within passing cohorts: `high` (n >= 30, always true
+       in production since gate floor exceeds tier threshold). `medium` exists
+       in code but is only reachable via test-mode gate injection.
+    5. Return range with comparable cases.
     """
     
     # Industry standard multipliers for fallback
@@ -50,8 +59,7 @@ class SettlementEstimator:
     # Confidence thresholds
     CONFIDENCE_THRESHOLDS = {
         "high": 30,     # 30+ cases = high confidence
-        "medium": 15,   # 15-29 cases = medium confidence
-        "low": 0        # <15 cases = low confidence (use multipliers)
+        "medium": 15,   # gate-dependent; only reachable when gate floor lowered below 30
     }
     
     def __init__(self, db_connection=None, gate: Optional["IntelligenceGate"] = None):
