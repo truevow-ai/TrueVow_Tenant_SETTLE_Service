@@ -81,22 +81,6 @@ async def test_bucket_to_midpoint():
     assert estimator._bucket_to_midpoint("$1M+") == 1500000
 
 
-def test_multiplier_ranges():
-    """Test multiplier fallback calculation"""
-    
-    estimator = SettlementEstimator()
-    
-    # Test low severity
-    ranges, confidence = estimator._calculate_multiplier_ranges(4000, n_cases=5)
-    assert confidence == "low"
-    assert ranges["p25"] < ranges["median"] < ranges["p75"]
-    
-    # Test high severity
-    ranges, confidence = estimator._calculate_multiplier_ranges(50000, n_cases=10)
-    assert confidence == "low"
-    assert ranges["median"] >= 50000 * 2.0  # At least 2x multiplier
-
-
 @pytest.mark.asyncio
 async def test_response_time():
     """Test that estimator responds within 1 second"""

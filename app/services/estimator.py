@@ -49,13 +49,6 @@ class SettlementEstimator:
     5. Return range with comparable cases.
     """
     
-    # Industry standard multipliers for fallback
-    MEDICAL_MULTIPLIERS = {
-        "low": {"min": 1.5, "typical": 2.0, "high": 3.0},
-        "medium": {"min": 2.0, "typical": 3.5, "high": 5.0},
-        "high": {"min": 3.0, "typical": 5.0, "high": 8.0}
-    }
-    
     # Confidence thresholds
     CONFIDENCE_THRESHOLDS = {
         "high": 30,     # 30+ cases = high confidence
@@ -309,63 +302,6 @@ class SettlementEstimator:
         logger.info(f"Calculated percentile ranges: {ranges} (n={n_cases}, confidence={confidence})")
         
         return ranges, confidence
-    
-    def _calculate_multiplier_ranges(
-        self,
-        medical_bills: float,
-        n_cases: int
-    ) -> Tuple[Dict[str, float], str]:
-        """
-        Calculate settlement ranges using multiplier fallback method.
-
-        TODO Year-2: RETIRED. The IntelligenceGate now short-circuits any
-        request with n<50 to own_case_only instead of synthesizing a range
-        from industry multipliers. Kept here only to avoid a churny diff;
-        remove once all callers are audited.
-
-        Used when insufficient comparable cases (<15).
-        
-        Algorithm:
-        1. Determine severity level (based on medical bills)
-        2. Apply industry standard multipliers
-        3. Generate conservative range
-        
-        Args:
-            medical_bills: Medical bills amount
-            n_cases: Number of comparable cases found
-            
-        Returns:
-            Tuple of (ranges dict, confidence level = 'low')
-        """
-        # Determine severity level based on medical bills
-        if medical_bills < 5000:
-            severity = "low"
-        elif medical_bills < 25000:
-            severity = "medium"
-        else:
-            severity = "high"
-        
-        # Get multipliers
-        multipliers = self.MEDICAL_MULTIPLIERS[severity]
-        
-        # Calculate ranges
-        p25 = medical_bills * multipliers["min"]
-        median = medical_bills * multipliers["typical"]
-        p75 = medical_bills * multipliers["high"]
-        p95 = medical_bills * multipliers["high"] * 1.5  # Extra cushion for 95th
-        
-        ranges = {
-            "p25": round(p25, 2),
-            "median": round(median, 2),
-            "p75": round(p75, 2),
-            "p95": round(p95, 2)
-        }
-        
-        logger.warning(
-            f"Insufficient cases (n={n_cases}). Using multiplier fallback: {ranges}"
-        )
-        
-        return ranges, "low"
     
     def _bucket_to_midpoint(self, bucket: str) -> float:
         """
