@@ -11,7 +11,7 @@ These endpoints are called by the SaaS Admin platform to manage:
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Optional, Dict
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import logging
 
 from app.models.case_bank import ContributionResponse
