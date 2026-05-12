@@ -31,6 +31,7 @@ ENV/
 *.swp
 *.swo
 *~
+.qoder/
 
 # Environment variables
 .env
@@ -45,6 +46,9 @@ ENV/
 # Logs
 *.log
 logs/
+
+# Data (bulk scraping artifacts — FJC dumps, CSV outputs, etc.)
+data/
 
 # OS
 .DS_Store
