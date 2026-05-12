@@ -31,10 +31,22 @@ async def estimate_settlement_range(
     - Both methods provide user_id and optional tenant_id for audit
     
     **Algorithm:**
-    - Queries database for comparable cases (jurisdiction, case type, injury)
-    - If >= 15 cases: Uses percentile calculation (25th, median, 75th, 95th)
-    - If < 15 cases: Uses multiplier fallback (medical bills * industry multipliers)
-    - Assigns confidence level: high (30+), medium (15-29), low (<15)
+    - Calls IntelligenceGate to verify cohort credibility (Year-2 'Credible
+      Aggregation' floor: MIN_AGGREGATE_N=50 approved cases for jurisdiction + case_type).
+    - If gate returns `sufficient`: queries comparable cases (state-suffix +
+      case_type + injury_category overlap), computes percentiles
+      (25th/median/75th/95th), returns full estimate.
+    - If gate returns `insufficient_data`: returns suppressed response with
+      `own_case_only=true` and aggregate widgets blocked (no multiplier
+      fallback — synthesizing ranges from sub-threshold data is the
+      anti-pattern this gate exists to prevent).
+
+    **Confidence labels:**
+    - `insufficient_data` — gate floor not met.
+    - `high` — gate passed AND n >= 30 (production-reachable for all passing
+      requests, since gate floor 50 exceeds tier threshold 30).
+    - `medium` — gate passed AND n < 30 (only reachable under a lowered gate
+      floor for testing; not production-reachable today).
     
     **Returns:**
     - Settlement range with comparable cases
