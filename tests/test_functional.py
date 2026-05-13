@@ -6,11 +6,45 @@ They verify actual behavior with real data.
 """
 
 import pytest
+from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.intelligence_gate import AggregateGateResult, MIN_AGGREGATE_N
 
 client = TestClient(app)
+
+
+# Year-2 mandatory v2 fields — every /submit payload must carry these.
+_V2_FIELDS = {
+    "intake_version_id": "v2",
+    "economic_strength_at_intake": "moderate",
+    "final_treatment_escalation": "injections",
+    "settlement_band": "150k_500k",
+    "policy_limit_known": True,
+    "time_to_resolution": "12_24_months",
+    "litigation_filed": False,
+}
+
+
+@pytest.fixture
+def patch_gate_sufficient():
+    """
+    Patch IntelligenceGate.check to return sufficient — lets the estimator
+    run the percentile path against mock cases without needing a live DB.
+    """
+    stub_result = AggregateGateResult(
+        status="sufficient",
+        n=120,
+        threshold=MIN_AGGREGATE_N,
+        own_case_only=False,
+        suppressed_features=[],
+    )
+    with patch(
+        "app.services.estimator.IntelligenceGate.check",
+        new=AsyncMock(return_value=stub_result),
+    ):
+        yield
 
 
 def test_health_endpoint():
@@ -21,7 +55,7 @@ def test_health_endpoint():
     assert response.json()["status"] == "operational"
 
 
-def test_query_estimate_endpoint(auth_headers):
+def test_query_estimate_endpoint(auth_headers, patch_gate_sufficient):
     """Test settlement range estimation endpoint"""
     
     request_data = {
@@ -66,7 +100,7 @@ def test_query_estimate_validation_error(auth_headers):
     assert response.status_code == 422  # Validation error
 
 
-def test_contribution_endpoint():
+def test_contribution_endpoint(auth_headers):
     """Test settlement contribution endpoint"""
     
     contribution_data = {
@@ -83,10 +117,13 @@ def test_contribution_endpoint():
         "defendant_category": "Business",
         "outcome_type": "Settlement",
         "outcome_amount_range": "$300k-$600k",
-        "consent_confirmed": True
+        "consent_confirmed": True,
+        **_V2_FIELDS,
     }
     
-    response = client.post("/api/v1/contribute/submit", json=contribution_data)
+    response = client.post(
+        "/api/v1/contribute/submit", json=contribution_data, headers=auth_headers
+    )
     
     assert response.status_code == 200
     data = response.json()
@@ -102,7 +139,7 @@ def test_contribution_endpoint():
     assert data["status"] == "pending"
 
 
-def test_contribution_validation_error():
+def test_contribution_validation_error(auth_headers):
     """Test contribution validation error"""
     
     # Invalid: consent not confirmed
@@ -117,14 +154,17 @@ def test_contribution_validation_error():
         "defendant_category": "Business",
         "outcome_type": "Settlement",
         "outcome_amount_range": "$300k-$600k",
-        "consent_confirmed": False  # Invalid
+        "consent_confirmed": False,  # Invalid
+        **_V2_FIELDS,
     }
     
-    response = client.post("/api/v1/contribute/submit", json=contribution_data)
+    response = client.post(
+        "/api/v1/contribute/submit", json=contribution_data, headers=auth_headers
+    )
     assert response.status_code == 400  # Validation error
 
 
-def test_contribution_anonymization_error():
+def test_contribution_anonymization_error(auth_headers):
     """Test contribution anonymization check"""
     
     # Invalid: contains PHI (SSN)
@@ -139,10 +179,13 @@ def test_contribution_anonymization_error():
         "defendant_category": "Business",
         "outcome_type": "Settlement",
         "outcome_amount_range": "$300k-$600k",
-        "consent_confirmed": True
+        "consent_confirmed": True,
+        **_V2_FIELDS,
     }
     
-    response = client.post("/api/v1/contribute/submit", json=contribution_data)
+    response = client.post(
+        "/api/v1/contribute/submit", json=contribution_data, headers=auth_headers
+    )
     assert response.status_code == 400  # Anonymization error
 
 
@@ -229,7 +272,7 @@ def test_service_health_endpoints():
 
 
 @pytest.mark.asyncio
-async def test_end_to_end_workflow(auth_headers):
+async def test_end_to_end_workflow(auth_headers, patch_gate_sufficient):
     """
     Test complete workflow:
     1. Submit contribution
@@ -249,10 +292,13 @@ async def test_end_to_end_workflow(auth_headers):
         "defendant_category": "Business",
         "outcome_type": "Settlement",
         "outcome_amount_range": "$300k-$600k",
-        "consent_confirmed": True
+        "consent_confirmed": True,
+        **_V2_FIELDS,
     }
     
-    response = client.post("/api/v1/contribute/submit", json=contribution_data)
+    response = client.post(
+        "/api/v1/contribute/submit", json=contribution_data, headers=auth_headers
+    )
     assert response.status_code == 200
     contribution_id = response.json()["contribution_id"]
     

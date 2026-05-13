@@ -8,6 +8,19 @@ from app.services.validator import DataValidator
 from app.models.case_bank import ContributionRequest
 
 
+# Year-2 mandatory v2 fields — every ContributionRequest test fixture must
+# supply these, else Pydantic rejects the payload before the validator runs.
+_V2_FIELDS = {
+    "intake_version_id": "v2",
+    "economic_strength_at_intake": "moderate",
+    "final_treatment_escalation": "injections",
+    "settlement_band": "150k_500k",
+    "policy_limit_known": True,
+    "time_to_resolution": "12_24_months",
+    "litigation_filed": False,
+}
+
+
 def test_validate_jurisdiction():
     """Test jurisdiction format validation"""
     
@@ -70,7 +83,8 @@ def test_validate_contribution():
         defendant_category="Business",
         outcome_type="Settlement",
         outcome_amount_range="$300k-$600k",
-        consent_confirmed=True
+        consent_confirmed=True,
+        **_V2_FIELDS,
     )
     
     is_valid, errors = validator.validate_contribution(valid_request)
@@ -89,7 +103,8 @@ def test_validate_contribution():
         defendant_category="Business",
         outcome_type="Settlement",
         outcome_amount_range="$300k-$600k",
-        consent_confirmed=False  # Invalid
+        consent_confirmed=False,  # Invalid
+        **_V2_FIELDS,
     )
     
     is_valid, errors = validator.validate_contribution(invalid_request)
@@ -114,7 +129,8 @@ def test_check_for_outliers():
         defendant_category="Business",
         outcome_type="Settlement",
         outcome_amount_range="$150k-$225k",  # ~3x multiplier (normal)
-        consent_confirmed=True
+        consent_confirmed=True,
+        **_V2_FIELDS,
     )
     
     warnings = validator._check_for_outliers(normal_request)
@@ -132,7 +148,8 @@ def test_check_for_outliers():
         defendant_category="Business",
         outcome_type="Settlement",
         outcome_amount_range="$1M+",  # >100x multiplier (outlier)
-        consent_confirmed=True
+        consent_confirmed=True,
+        **_V2_FIELDS,
     )
     
     warnings = validator._check_for_outliers(outlier_request)
