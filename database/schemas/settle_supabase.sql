@@ -83,9 +83,14 @@ CREATE TABLE IF NOT EXISTS settle_contributions (
     -- METADATA
     -- ========================================================================
     created_at TIMESTAMPTZ DEFAULT now(),
+    created_by UUID,                                    -- User who created this record
     updated_at TIMESTAMPTZ DEFAULT now(),
-    status TEXT DEFAULT 'pending',                  -- 'pending', 'approved', 'rejected', 'flagged'
-    rejection_reason TEXT,                          -- If rejected, why?
+    updated_by UUID,                                   -- User who last updated this record
+    deleted_at TIMESTAMPTZ,                             -- Soft-delete timestamp (indexed)
+    deleted_by UUID,                                    -- User who soft-deleted this record
+    row_version INTEGER NOT NULL DEFAULT 1,             -- Optimistic locking
+    status TEXT DEFAULT 'pending',                     -- 'pending', 'approved', 'rejected', 'flagged'
+    rejection_reason TEXT,                             -- If rejected, why?
     
     -- ========================================================================
     -- DATA QUALITY FLAGS
@@ -122,6 +127,14 @@ CREATE INDEX IF NOT EXISTS idx_settle_contributions_query_pattern
 ON settle_contributions(jurisdiction, case_type, status) 
 WHERE status = 'approved';
 
+-- Soft-delete indexes
+CREATE INDEX IF NOT EXISTS idx_settle_contributions_deleted_at 
+ON settle_contributions(deleted_at) 
+WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_settle_contributions_deleted_by 
+ON settle_contributions(deleted_by);
+
 -- ============================================================================
 -- TABLE 2: settle_api_keys
 -- Purpose: API key management and access control
@@ -149,6 +162,12 @@ CREATE TABLE IF NOT EXISTS settle_api_keys (
     -- Status
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT now(),
+    created_by UUID,                                -- User who created this key
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    updated_by UUID,                               -- User who last updated this key
+    deleted_at TIMESTAMPTZ,                         -- Soft-delete timestamp (indexed)
+    deleted_by UUID,                                -- User who soft-deleted this key
+    row_version INTEGER NOT NULL DEFAULT 1,         -- Optimistic locking
     expires_at TIMESTAMPTZ,                         -- NULL = never expires
     
     -- Metadata
@@ -168,6 +187,14 @@ CREATE INDEX IF NOT EXISTS idx_settle_api_keys_active ON settle_api_keys(is_acti
 CREATE INDEX IF NOT EXISTS idx_settle_api_keys_prefix ON settle_api_keys(api_key_prefix);
 CREATE INDEX IF NOT EXISTS idx_settle_api_keys_user ON settle_api_keys(user_id);
 CREATE INDEX IF NOT EXISTS idx_settle_api_keys_email ON settle_api_keys(user_email);
+
+-- Soft-delete indexes
+CREATE INDEX IF NOT EXISTS idx_settle_api_keys_deleted_at 
+ON settle_api_keys(deleted_at) 
+WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_settle_api_keys_deleted_by 
+ON settle_api_keys(deleted_by);
 
 -- ============================================================================
 -- TABLE 3: settle_founding_members
