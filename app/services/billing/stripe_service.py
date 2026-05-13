@@ -16,11 +16,12 @@ class StripeService:
     """
     Service for processing payments via Stripe.
     
-    Pricing:
-    - Founding Members: Free forever (first 2,100)
-    - Standard Users: $49 per report
-    - Premium Subscription: $199/month unlimited
-    - Enterprise: Custom pricing
+    Pricing (Final Approved Model):
+    - Standalone: $39 per report
+    - INTAKE + LEVERAGE Ecosystem: $29 per report
+    - SETTLE PRO: $299/month, 15 reports included, $25/report overage
+    - PRO includes rolling annual rollover bank (capped at 63 reports)
+    - Founding Members (legacy): Free forever (first 2,100)
     """
     
     def __init__(self):
@@ -354,105 +355,165 @@ class StripeService:
     ) -> bool:
         """
         Handle Stripe webhook events.
-        
+
+        NOTE: Subscription lifecycle, rollover bank, and bundle management
+        are owned by Platform Service (port 3000). Stripe webhooks should
+        be configured to hit Platform Service, not SETTLE directly.
+
+        This handler exists for development/testing only. In production,
+        Platform Service handles all Stripe events and calls back to SETTLE
+        via the feature-access and consumption-reporting APIs.
+
         Args:
             event: Stripe event dictionary
-            
+
         Returns:
             True if handled successfully
         """
         event_type = event.get('type')
-        
+
         try:
             if event_type == 'payment_intent.succeeded':
                 payment_intent = event['data']['object']
                 logger.info(f"Payment succeeded: {payment_intent['id']}")
-                # TODO: Update database, send email notification
-                
+
             elif event_type == 'payment_intent.payment_failed':
                 payment_intent = event['data']['object']
                 logger.warning(f"Payment failed: {payment_intent['id']}")
-                # TODO: Send failure notification
-                
+
             elif event_type == 'customer.subscription.created':
                 subscription = event['data']['object']
                 logger.info(f"Subscription created: {subscription['id']}")
-                # TODO: Update user access level
-                
+
             elif event_type == 'customer.subscription.deleted':
                 subscription = event['data']['object']
                 logger.info(f"Subscription cancelled: {subscription['id']}")
-                # TODO: Downgrade user access
-                
+
+            elif event_type == 'customer.subscription.updated':
+                subscription = event['data']['object']
+                logger.info(f"Subscription updated: {subscription['id']} -> {subscription.get('status')}")
+
             elif event_type == 'invoice.payment_succeeded':
                 invoice = event['data']['object']
                 logger.info(f"Invoice paid: {invoice['id']}")
-                # TODO: Send receipt
-                
+
             elif event_type == 'invoice.payment_failed':
                 invoice = event['data']['object']
                 logger.warning(f"Invoice payment failed: {invoice['id']}")
-                # TODO: Send payment failure notification
-                
+
             else:
                 logger.info(f"Unhandled webhook event: {event_type}")
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to handle webhook event: {str(e)}", exc_info=True)
             return False
+
     
     async def get_pricing(self) -> Dict[str, Any]:
         """
         Get current pricing information.
-        
+
         Returns:
             Dictionary with pricing details
+
+        Final Billing Ladder:
+            Standalone casual:       $39/report
+            Standalone 11-pack:      $385 ($35/report)
+            Standalone 25-pack:      $750 ($30/report)
+            Ecosystem user:          $29/report (monthly arrears, no bundles)
+            SETTLE Pro:              $299/mo, 15 included, $25 extra
+            Founding Members:        Free forever (legacy)
         """
         return {
             "founding_member": {
                 "price": 0,
                 "currency": "USD",
-                "description": "Free forever (first 2,100 members)",
+                "description": "Free forever (first 2,100 members) — legacy program",
+                "billing_model": "legacy",
                 "features": [
-                    "Unlimited queries",
-                    "Unlimited PDF reports",
+                    "Unlimited reports",
+                    "Blockchain-verified reports",
                     "API access",
-                    "Priority support",
-                    "Early feature access"
+                    "Priority support"
                 ]
             },
-            "standard_report": {
-                "price": 49.00,
+            "standalone_single": {
+                "price": 39.00,
                 "currency": "USD",
-                "description": "Per report",
+                "description": "Pay per report",
+                "billing_model": "pay_per_report",
                 "features": [
-                    "Professional PDF report",
+                    "Professional 4-page report",
                     "Blockchain verified",
                     "Comparable cases analysis",
-                    "7-day download access"
+                    "Confidence-level disclosure"
                 ]
             },
-            "premium_subscription": {
-                "price": 199.00,
+            "standalone_11_pack": {
+                "price": 385.00,
+                "per_report": 35.00,
+                "reports": 11,
+                "currency": "USD",
+                "description": "11 reports, prepaid — saves ~10% vs single",
+                "billing_model": "prepaid_bundle",
+                "features": [
+                    "11 prepaid reports",
+                    "Credits do not expire",
+                    "Same report quality as single"
+                ]
+            },
+            "standalone_25_pack": {
+                "price": 750.00,
+                "per_report": 30.00,
+                "reports": 25,
+                "currency": "USD",
+                "description": "25 reports, prepaid — saves ~23% vs single",
+                "billing_model": "prepaid_bundle",
+                "features": [
+                    "25 prepaid reports",
+                    "Credits do not expire",
+                    "Same report quality as single"
+                ]
+            },
+            "ecosystem": {
+                "price": 29.00,
+                "currency": "USD",
+                "description": "Per report — INTAKE + LEVERAGE ecosystem rate",
+                "billing_model": "monthly_arrears",
+                "note": "Billed monthly in arrears. No bundles, no prepayment.",
+                "features": [
+                    "Same as standalone report",
+                    "Discounted ecosystem rate",
+                    "Auto-invoiced monthly — no prepayment",
+                    "Confidence-level disclosure"
+                ]
+            },
+            "settle_pro": {
+                "price": 299.00,
                 "currency": "USD",
                 "billing_period": "monthly",
-                "description": "Unlimited reports",
+                "description": "15 reports/month included",
+                "billing_model": "subscription",
+                "monthly_allocation": 15,
+                "overage_price": 25.00,
+                "rollover_bank_cap": 63,
                 "features": [
-                    "Unlimited queries",
-                    "Unlimited reports",
+                    "15 reports/month included",
+                    "Rolling annual rollover bank (capped at 63)",
+                    "$25/report overage",
                     "API access",
-                    "Priority support",
-                    "Custom integrations"
+                    "Priority support"
                 ]
             },
             "enterprise": {
                 "price": "Custom",
                 "currency": "USD",
                 "description": "Contact sales",
+                "billing_model": "custom",
                 "features": [
-                    "Everything in Premium",
+                    "Everything in SETTLE PRO",
                     "White-label option",
                     "Dedicated support",
                     "Custom data sources",
