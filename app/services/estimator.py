@@ -128,6 +128,61 @@ class SettlementEstimator:
             request, aggregation_level=gate_result.aggregation_level
         )
 
+        # Step 1.5 (Cohort R, 2026-05-13): Empty-pool guard.
+        # The gate may pass at a tier (county or state) where the cohort
+        # credibility floor is met for jurisdiction + case_type, but the
+        # post-gate query adds an injury_category containment filter that
+        # can narrow the pool to zero rows. Without this guard,
+        # numpy.percentile([]) raises IndexError and the endpoint returns
+        # 500. Surface a graceful insufficient_data response instead — the
+        # gate's tier counts are preserved so the UI can still tell the
+        # attorney "the jurisdiction has data but no verdicts match your
+        # specific injury filter."
+        if not comparable_cases:
+            response_time_ms = int(
+                (datetime.now(UTC) - start_time).total_seconds() * 1000
+            )
+            injuries_label = ", ".join(request.injury_category) if request.injury_category else "the requested injury"
+            tier_label = (
+                gate_result.aggregation_level
+                if gate_result.aggregation_level in ("county", "state")
+                else "available"
+            )
+            tier_n = (
+                gate_result.n_county if gate_result.aggregation_level == "county"
+                else gate_result.n_state
+            )
+            logger.info(
+                "estimate_settlement_range: gate cleared %s tier (n=%d) but "
+                "injury-filtered pool is empty for %s + %s + %s; returning "
+                "insufficient_data.",
+                tier_label, tier_n, request.jurisdiction, request.case_type,
+                request.injury_category,
+            )
+            return EstimateResponse(
+                percentile_25=0.0,
+                median=0.0,
+                percentile_75=0.0,
+                percentile_95=0.0,
+                n_cases=0,
+                confidence="insufficient_data",
+                own_case_only=True,
+                suppressed_features=list(SUPPRESSED_WHEN_INSUFFICIENT),
+                aggregation_level="none",
+                n_county=gate_result.n_county,
+                n_state=gate_result.n_state,
+                comparable_cases=[],
+                range_justification=(
+                    f"{request.jurisdiction} has {tier_n} approved "
+                    f"{request.case_type} verdicts at the {tier_label} tier, "
+                    f"but none match the requested injury filter "
+                    f"({injuries_label}). Aggregate ranges suppressed; "
+                    f"precision will improve as more matching cases are "
+                    f"contributed."
+                ),
+                response_time_ms=response_time_ms,
+            )
+
         # Step 2: Calculate ranges via percentile method.
         ranges, confidence = self._calculate_percentile_ranges(
             comparable_cases,

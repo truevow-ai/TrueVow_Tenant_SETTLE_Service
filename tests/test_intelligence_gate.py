@@ -475,3 +475,67 @@ async def test_estimator_insufficient_carries_tier_fields():
     assert response.n_state == 30
     assert response.percentile_25 == 0.0
     assert response.median == 0.0
+
+
+@pytest.mark.asyncio
+async def test_estimator_handles_empty_pool_after_state_tier_pass():
+    """
+    Cohort R (2026-05-13): regression guard for the empty-pool 500.
+
+    The gate can clear the state tier on (jurisdiction + case_type) yet the
+    estimator's injury_category filter can narrow the pool to zero rows. The
+    estimator MUST short-circuit to a graceful insufficient_data response
+    instead of letting numpy.percentile([]) raise IndexError. The gate's
+    tier counts (n_county / n_state) are preserved so the UI can explain to
+    the attorney that the jurisdiction has data but no verdicts match the
+    requested injury filter.
+    """
+    stub_gate = MagicMock()
+    stub_gate.check = AsyncMock(return_value=AggregateGateResult(
+        status="sufficient",
+        aggregation_level="state",
+        n=193,
+        n_county=4,
+        n_state=193,
+        threshold=MIN_AGGREGATE_N,
+        own_case_only=False,
+        suppressed_features=[],
+        jurisdiction="Orange County, FL",
+        case_type="Premises Liability",
+    ))
+
+    estimator = SettlementEstimator(db_connection=None, gate=stub_gate)
+    # Force the post-gate pool to be empty regardless of mock data.
+    estimator._query_comparable_cases = AsyncMock(return_value=[])
+
+    request = EstimateRequest(
+        jurisdiction="Orange County, FL",
+        case_type="Premises Liability",
+        injury_category=["soft_tissue"],
+        medical_bills=30000.0,
+    )
+
+    # MUST NOT raise.
+    response = await estimator.estimate_settlement_range(request)
+
+    # Graceful insufficient_data shape.
+    assert response.confidence == "insufficient_data"
+    assert response.own_case_only is True
+    assert response.aggregation_level == "none"
+    assert response.n_cases == 0
+    assert response.percentile_25 == 0.0
+    assert response.median == 0.0
+    assert response.percentile_75 == 0.0
+    assert response.percentile_95 == 0.0
+    assert response.comparable_cases == []
+    # Gate tier counts preserved for UI messaging.
+    assert response.n_county == 4
+    assert response.n_state == 193
+    # Suppression list mirrors the gate-fail branch.
+    assert set(response.suppressed_features) == set(SUPPRESSED_WHEN_INSUFFICIENT)
+    # Justification names the jurisdiction, the n=193 statewide pool, and
+    # the injury filter that wiped the pool out.
+    j = (response.range_justification or "").lower()
+    assert "orange county" in j
+    assert "193" in j
+    assert "soft_tissue" in j or "injury" in j
