@@ -31,22 +31,23 @@ logger = logging.getLogger(__name__)
 
 class SettlementEstimator:
     """
-    Settlement Range Estimator using percentile-based calculation.
-    
+    Settlement Range Estimator using percentile-based calculation with
+    hierarchical jurisdiction fallback (Option D, 2026-05-07).
+
     Algorithm:
-    1. Query IntelligenceGate to verify (jurisdiction, case_type) cohort
-       credibility against MIN_AGGREGATE_N=50 floor.
-    2. If gate returns `sufficient`: query comparable cases (state-suffix +
-       case_type + injury_category overlap), compute percentiles
-       (25th, median, 75th, 95th), return full estimate.
-    3. If gate returns `insufficient_data`: return suppressed response with
-       own_case_only=True and aggregate widgets blocked. No multiplier
-       fallback — synthesizing ranges from sub-threshold data is the
-       anti-pattern this gate exists to prevent.
-    4. Confidence label within passing cohorts: `high` (n >= 30, always true
-       in production since gate floor exceeds tier threshold). `medium` exists
-       in code but is only reachable via test-mode gate injection.
-    5. Return range with comparable cases.
+    1. Query IntelligenceGate for cohort credibility. Gate returns one of:
+       - sufficient @ county tier (n_county >= 50) — use county-specific pool
+       - sufficient @ state tier  (n_state  >= 50) — use statewide + sentinel pool
+       - insufficient_data                         — short-circuit, suppress aggregates
+    2. If sufficient: query comparable cases at the tier the gate selected,
+       compute percentiles (25th, median, 75th, 95th), return full estimate
+       with aggregation_level signal so UI can label the precision tier.
+    3. If insufficient_data: return suppressed response with own_case_only=True
+       and aggregate widgets blocked. No multiplier fallback — synthesizing
+       ranges from sub-threshold data is the anti-pattern this gate exists
+       to prevent.
+    4. Confidence label within passing cohorts: `high` (n >= 30) or `medium`
+       (n < 30; only reachable via test-mode gate injection).
     """
     
     # Confidence thresholds
@@ -82,10 +83,10 @@ class SettlementEstimator:
         """
         start_time = datetime.now(UTC)
 
-        # Year-2 "Never Sell Empty Dashboards" gate — runs BEFORE we query.
-        # If fewer than MIN_AGGREGATE_N approved rows match, we short-circuit
-        # to own-case-only. No multiplier fallback — synthesizing a range from
-        # zero comparable cases is exactly the anti-pattern this gate blocks.
+        # Year-2 "Never Sell Empty Dashboards" gate with hierarchical fallback.
+        # Gate checks county-exact first, then state-wide+sentinel; returns
+        # aggregation_level in {county, state, none}. If neither tier clears
+        # n>=50, we short-circuit to own-case-only — no multiplier fallback.
         gate_result = await self.gate.check(
             jurisdiction=request.jurisdiction,
             case_type=request.case_type,
@@ -95,8 +96,10 @@ class SettlementEstimator:
                 (datetime.now(UTC) - start_time).total_seconds() * 1000
             )
             logger.info(
-                "Estimator short-circuit: insufficient_data for %s (n=%d, floor=%d)",
-                request.jurisdiction, gate_result.n, gate_result.threshold,
+                "Estimator short-circuit: insufficient_data for %s "
+                "(n_county=%d, n_state=%d, floor=%d)",
+                request.jurisdiction, gate_result.n_county, gate_result.n_state,
+                gate_result.threshold,
             )
             return EstimateResponse(
                 percentile_25=0.0,
@@ -107,20 +110,25 @@ class SettlementEstimator:
                 confidence="insufficient_data",
                 own_case_only=True,
                 suppressed_features=list(SUPPRESSED_WHEN_INSUFFICIENT),
+                aggregation_level="none",
+                n_county=gate_result.n_county,
+                n_state=gate_result.n_state,
                 comparable_cases=[],
                 range_justification=(
-                    f"Insufficient approved data in {request.jurisdiction} "
-                    f"(n={gate_result.n}, floor={gate_result.threshold}). "
-                    f"Aggregate ranges suppressed per Year-2 credibility policy."
+                    f"Insufficient approved data for {request.jurisdiction} "
+                    f"(county n={gate_result.n_county}, state n={gate_result.n_state}, "
+                    f"floor={gate_result.threshold}). Aggregate ranges suppressed "
+                    f"per Year-2 credibility policy."
                 ),
                 response_time_ms=response_time_ms,
             )
 
-        # Step 1: Query comparable cases (gate already passed, so n>=50)
-        comparable_cases = await self._query_comparable_cases(request)
+        # Step 1: Query comparable cases at the tier the gate selected.
+        comparable_cases = await self._query_comparable_cases(
+            request, aggregation_level=gate_result.aggregation_level
+        )
 
         # Step 2: Calculate ranges via percentile method.
-        # Multiplier fallback is retired — see _calculate_multiplier_ranges TODO.
         ranges, confidence = self._calculate_percentile_ranges(
             comparable_cases,
             request.medical_bills
@@ -129,12 +137,15 @@ class SettlementEstimator:
         # Step 3: Select representative comparable cases for report
         sample_cases = self._select_representative_cases(comparable_cases, limit=10)
         
-        # Step 4: Generate justification
+        # Step 4: Generate justification (tier-aware copy)
         justification = self._generate_justification(
             n_cases=len(comparable_cases),
             confidence=confidence,
             request=request,
-            ranges=ranges
+            ranges=ranges,
+            aggregation_level=gate_result.aggregation_level,
+            n_county=gate_result.n_county,
+            n_state=gate_result.n_state,
         )
         
         # Calculate response time
@@ -147,31 +158,41 @@ class SettlementEstimator:
             percentile_95=ranges["p95"],
             n_cases=len(comparable_cases),
             confidence=confidence,
+            aggregation_level=gate_result.aggregation_level,
+            n_county=gate_result.n_county,
+            n_state=gate_result.n_state,
             comparable_cases=sample_cases,
             range_justification=justification,
             response_time_ms=response_time_ms
         )
     
     async def _query_comparable_cases(
-        self, request: EstimateRequest
+        self,
+        request: EstimateRequest,
+        aggregation_level: str = "county",
     ) -> List[SettleContribution]:
         """Query approved comparable cases from settle_contributions.
 
-        Filters: same state (parsed from jurisdiction), same case_type,
-        overlapping injury_category (array-contains), status='approved'.
-        Returns at most 50 most recent cases.
+        Tier routing (Option D):
+          - aggregation_level='county': exact jurisdiction match — numbers reflect
+            ONLY the requested county. Used when gate cleared county tier (n>=50).
+          - aggregation_level='state':  state-wide match (all counties in state)
+            PLUS the "<STATE> (Unknown County)" sentinel bucket. Used when gate
+            fell back to state tier. Two separate queries are issued (PostgREST
+            `or` over two ILIKE patterns is brittle across client versions)
+            and the results are merged/deduped.
 
-        Falls back to _generate_mock_cases() when self.db is None — preserves
-        current behavior until SETTLE_USE_MOCK_DATA is flipped to false.
+        Falls back to _generate_mock_cases() when self.db is None or the
+        jurisdiction is malformed — preserves current test behavior.
         """
-        # Mock fallback — preserves current behavior when DB client isn't wired
         if self.db is None:
             logger.info(
                 "_query_comparable_cases: self.db is None, falling back to mock"
             )
             return self._generate_mock_cases(request)
 
-        # Parse state from jurisdiction (e.g. "Miami-Dade County, FL" -> "FL")
+        # Parse state suffix once — needed for state tier; for county tier we
+        # also use it as a validity check (malformed jurisdiction -> mock).
         try:
             state = request.jurisdiction.rsplit(",", 1)[1].strip()
         except (IndexError, AttributeError) as e:
@@ -188,31 +209,17 @@ class SettlementEstimator:
             )
             return self._generate_mock_cases(request)
 
-        # Build query: approved + state-suffix + case_type + overlapping injury_category
         try:
-            query = (
-                self.db.table("settle_contributions")
-                .select("*")
-                .eq("status", "approved")
-                .eq("case_type", request.case_type)
-                .ilike("jurisdiction", f"%, {state}")
-            )
-
-            # Array-contains: only rows where injury_category contains ALL
-            # requested categories. Skip filter when request list is empty.
-            if request.injury_category:
-                query = query.cs("injury_category", request.injury_category)
-
-            # Cap at 50 most recent (statistical ceiling for percentile calc)
-            query = query.order("created_at", desc=True).limit(50)
-
-            response = query.execute()  # synchronous per SupabaseRESTQuery contract
-            rows = response.data or []
-
+            if aggregation_level == "state":
+                rows = self._query_state_tier(request, state)
+            else:
+                # Default: county tier (back-compat with existing call sites)
+                rows = self._query_county_tier(request)
         except Exception as e:
             logger.exception(
                 f"_query_comparable_cases: query failed "
-                f"(state={state}, case_type={request.case_type!r}, "
+                f"(tier={aggregation_level}, state={state}, "
+                f"case_type={request.case_type!r}, "
                 f"injury_category={request.injury_category}): {e}. "
                 f"Falling back to mock."
             )
@@ -220,13 +227,13 @@ class SettlementEstimator:
 
         logger.info(
             f"_query_comparable_cases: returned {len(rows)} rows "
-            f"(state={state}, case_type={request.case_type!r}, "
+            f"(tier={aggregation_level}, state={state}, "
+            f"case_type={request.case_type!r}, "
             f"injury_category={request.injury_category})"
         )
 
-        # Convert rows to SettleContribution (direct path confirmed by Stage 2.3b.1 probe).
-        # Pydantic v2 silently drops the 13 extra audit columns; missing
-        # `contributor_api_key_id` defaults to None.
+        # Convert rows to SettleContribution. Pydantic v2 silently drops
+        # extra audit columns; missing `contributor_api_key_id` defaults to None.
         comparable_cases: List[SettleContribution] = []
         for row in rows:
             try:
@@ -238,6 +245,65 @@ class SettlementEstimator:
                 )
 
         return comparable_cases
+
+    def _build_base_query(self, request: EstimateRequest):
+        """Shared filter chain (status+case_type+injury) for both tiers."""
+        query = (
+            self.db.table("settle_contributions")
+            .select("*")
+            .eq("status", "approved")
+            .eq("case_type", request.case_type)
+        )
+        if request.injury_category:
+            query = query.cs("injury_category", request.injury_category)
+        return query
+
+    def _query_county_tier(self, request: EstimateRequest) -> List[dict]:
+        """County-exact query. Returns raw row dicts (caller builds models)."""
+        query = (
+            self._build_base_query(request)
+            .eq("jurisdiction", request.jurisdiction)
+            .order("created_at", desc=True)
+            .limit(50)
+        )
+        return query.execute().data or []
+
+    def _query_state_tier(self, request: EstimateRequest, state: str) -> List[dict]:
+        """State-tier query: county-suffix UNION sentinel, dedupe by id, cap 50.
+
+        Two queries because PostgREST `or` with multiple ilike patterns is
+        not uniformly supported across the client stack. Each query caps at
+        50 rows on the server side; we dedupe client-side and truncate.
+        """
+        # Query A: all counties in state (e.g., 'Miami-Dade County, FL').
+        q1 = (
+            self._build_base_query(request)
+            .ilike("jurisdiction", f"%, {state}")
+            .order("created_at", desc=True)
+            .limit(50)
+        )
+        rows_a = q1.execute().data or []
+
+        # Query B: sentinel bucket (e.g., 'FL (Unknown County)').
+        q2 = (
+            self._build_base_query(request)
+            .ilike("jurisdiction", f"{state} (%")
+            .order("created_at", desc=True)
+            .limit(50)
+        )
+        rows_b = q2.execute().data or []
+
+        # Merge + dedupe by id, then truncate to 50 most recent.
+        seen = set()
+        merged: List[dict] = []
+        for row in rows_a + rows_b:
+            rid = row.get("id")
+            if rid in seen:
+                continue
+            seen.add(rid)
+            merged.append(row)
+        merged.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+        return merged[:50]
     
     def _calculate_percentile_ranges(
         self,
@@ -389,44 +455,74 @@ class SettlementEstimator:
         n_cases: int,
         confidence: str,
         request: EstimateRequest,
-        ranges: Dict[str, float]
+        ranges: Dict[str, float],
+        aggregation_level: str = "county",
+        n_county: int = 0,
+        n_state: int = 0,
     ) -> str:
         """
-        Generate range justification text for report.
-        
-        Args:
-            n_cases: Number of comparable cases
-            confidence: Confidence level
-            request: Original request
-            ranges: Calculated ranges
-            
-        Returns:
-            Justification text
+        Generate tier-aware range justification text for report.
+
+        Two tiers (Option D):
+          - county: numbers reflect the requested county specifically.
+          - state:  numbers reflect statewide + Unknown-County sentinel rows.
+                    Copy tells the attorney that county-specific precision
+                    is still being aggregated.
         """
         if confidence == "high":
             method = f"based on analysis of {n_cases} highly comparable cases"
         elif confidence == "medium":
             method = f"based on analysis of {n_cases} comparable cases"
         else:
-            method = f"using industry standard multipliers (only {n_cases} comparable cases available)"
-        
-        justification = (
-            f"The settlement range estimate for {', '.join(request.injury_category)} cases in "
-            f"{request.jurisdiction} was calculated {method}. "
+            method = (
+                f"using industry standard multipliers "
+                f"(only {n_cases} comparable cases available)"
+            )
+
+        ranges_sentence = (
             f"The median settlement value is ${ranges['median']:,.0f}, with the "
             f"25th percentile at ${ranges['p25']:,.0f} and 75th percentile at "
             f"${ranges['p75']:,.0f}. The 95th percentile (high end) is "
-            f"${ranges['p95']:,.0f}. This range reflects actual case outcomes "
-            f"in your jurisdiction with similar injury profiles and medical expenses."
+            f"${ranges['p95']:,.0f}."
         )
-        
+
+        injuries = ", ".join(request.injury_category)
+
+        if aggregation_level == "state":
+            # Extract state code and county name for attorney-friendly copy.
+            try:
+                parts = request.jurisdiction.rsplit(",", 1)
+                county_label = parts[0].strip() if len(parts) == 2 else request.jurisdiction
+                state_label = parts[1].strip() if len(parts) == 2 else "your state"
+            except Exception:
+                county_label = request.jurisdiction
+                state_label = "your state"
+
+            justification = (
+                f"Based on {n_state} {state_label} {request.case_type} verdicts "
+                f"with {injuries}, calculated {method}. {ranges_sentence} "
+                f"County-specific data for {county_label} is still being "
+                f"aggregated (currently {n_county} verdicts); this estimate "
+                f"uses statewide patterns. As more {county_label} cases enter "
+                f"the database, county-specific precision will be available."
+            )
+        else:
+            # county tier (or unexpected value; default to county copy)
+            justification = (
+                f"The settlement range estimate for {injuries} cases in "
+                f"{request.jurisdiction} was calculated {method}. "
+                f"{ranges_sentence} This range reflects actual case outcomes "
+                f"in your jurisdiction with similar injury profiles and "
+                f"medical expenses."
+            )
+
         if confidence == "low":
             justification += (
-                " Note: Due to limited comparable data in this jurisdiction, "
-                "these estimates use conservative industry multipliers and should "
-                "be considered preliminary estimates."
+                " Note: Due to limited comparable data, these estimates use "
+                "conservative industry multipliers and should be considered "
+                "preliminary estimates."
             )
-        
+
         return justification
     
     def _generate_mock_cases(self, request: EstimateRequest) -> List[SettleContribution]:

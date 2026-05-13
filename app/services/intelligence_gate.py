@@ -1,17 +1,25 @@
 """
-Intelligence Gate — the "Never Sell Empty Dashboards" guardrail.
+Intelligence Gate — the "Never Sell Empty Dashboards" guardrail with
+hierarchical jurisdiction fallback (Option D, 2026-05-07).
 
 Year-2 rule: if fewer than MIN_AGGREGATE_N approved settlement contributions
 match the caller's filters, the service MUST refuse to emit aggregate
-statistics (percentile ranges, carrier/defense-firm behavior, venue analytics,
-etc.) and fall back to own-case-only rendering on the caller.
+statistics. This is a HARD gate at EACH tier, not a soft confidence downgrade.
 
-This is a HARD gate, not a soft confidence downgrade. It exists because
-shipping a "median = $175k" chart that was computed from 7 cases is worse
-than shipping no chart at all.
+Hierarchical tiers (checked in order):
+  1. county tier — exact jurisdiction match (e.g. "Miami-Dade County, FL").
+     Pass if n_county >= MIN_AGGREGATE_N. Highest precision.
+  2. state tier — all counties in the state PLUS the "<STATE> (Unknown County)"
+     sentinel bucket. Pass if n_state >= MIN_AGGREGATE_N. Honest aggregation
+     level is labeled "state" on the response so the UI can surface it.
+  3. none — neither tier has n>=50. Suppress all aggregate widgets.
 
-The gate is pure counting — no ML, no heuristics, no fallback. The caller
-is responsible for suppressing any aggregate UI when `own_case_only=True`.
+Rationale: county-exact data is thin for most TopVerdict-sourced rows
+(trial verdicts without high-fidelity county resolution) but state-wide
+aggregates clear 50 comfortably. Industry-standard fallback — Westlaw,
+Jury Verdicts, etc. all show statewide patterns when county data is thin.
+Credibility floor (n>=50) is PRESERVED at each tier; we're only adding
+an honest precision signal, never lowering the bar.
 """
 
 from __future__ import annotations
@@ -31,7 +39,8 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 # Year-2 "Credible Aggregation" floor. Do not lower without a written
-# credibility rationale in docs/architecture/.
+# credibility rationale in docs/architecture/. Applies to BOTH tiers:
+# county-exact and state-with-sentinel must each clear 50 independently.
 MIN_AGGREGATE_N: int = 50
 
 # Features that MUST be suppressed when the gate returns insufficient_data.
@@ -57,13 +66,31 @@ class AggregateGateResult(BaseModel):
     Result of an intelligence-gate check. Callers MUST respect
     `own_case_only=True` by suppressing every widget in
     `suppressed_features`.
+
+    Hierarchical signal: `aggregation_level` tells the caller which tier
+    cleared the floor. UI / justification copy MUST reflect this tier.
     """
 
     status: Literal["sufficient", "insufficient_data"] = Field(
         ..., description="Whether aggregate intelligence may be rendered."
     )
-    n: int = Field(..., ge=0, description="Approved contributions matching the filter set.")
-    threshold: int = Field(default=MIN_AGGREGATE_N, description="Minimum N required.")
+    aggregation_level: Literal["county", "state", "none"] = Field(
+        default="none",
+        description=(
+            "Tier that cleared the floor. 'county' = exact county match, "
+            "'state' = state-wide + sentinel bucket fallback, 'none' = neither tier cleared."
+        ),
+    )
+    n: int = Field(..., ge=0, description="Effective approved-row count at the tier used.")
+    n_county: int = Field(
+        default=0, ge=0,
+        description="Approved rows at exact county match (tier 1).",
+    )
+    n_state: int = Field(
+        default=0, ge=0,
+        description="Approved rows at state-wide + sentinel (tier 2).",
+    )
+    threshold: int = Field(default=MIN_AGGREGATE_N, description="Minimum N required per tier.")
     own_case_only: bool = Field(
         ..., description="If True, caller must render only the user's own case — no aggregates."
     )
@@ -104,20 +131,19 @@ class IntelligenceGate:
         case_type: Optional[str] = None,
     ) -> AggregateGateResult:
         """
-        Count approved contributions matching the filters and decide whether
-        aggregate views may render.
+        Hierarchical gate check. Counts approved rows at two tiers and
+        returns the first that clears MIN_AGGREGATE_N.
 
         Args:
-            jurisdiction: e.g. "Duval County, FL". At least one filter is expected
-                          in practice, but all-None is allowed (returns the global
-                          total — useful for health checks / admin dashboards).
-            carrier: optional carrier name filter (will match the dedicated
-                     `carrier_id` column once it lands; for now matches nothing
-                     if the column doesn't exist — gate simply returns 0).
-            case_type: optional case-type filter (e.g. "Premises Liability").
+            jurisdiction: e.g. "Miami-Dade County, FL". Required for hierarchical
+                          fallback (state is parsed from the suffix). If None,
+                          gate runs the global count (health-check mode) and
+                          skips the tier logic.
+            carrier: optional carrier filter (soft-fails if column absent).
+            case_type: optional case-type filter (e.g. "Motor Vehicle Accident").
 
         Returns:
-            AggregateGateResult with n, status, and suppressed_features.
+            AggregateGateResult with status, aggregation_level, n_county, n_state.
         """
         db = self.db or await get_db()
 
@@ -129,7 +155,10 @@ class IntelligenceGate:
             )
             return AggregateGateResult(
                 status="insufficient_data",
+                aggregation_level="none",
                 n=0,
+                n_county=0,
+                n_state=0,
                 own_case_only=True,
                 suppressed_features=list(SUPPRESSED_WHEN_INSUFFICIENT),
                 jurisdiction=jurisdiction,
@@ -137,41 +166,154 @@ class IntelligenceGate:
                 case_type=case_type,
             )
 
-        try:
-            query = db.table("settle_contributions").select("id", count="exact").eq(
-                "status", "approved"
+        # ---- Tier 1: county-exact ----
+        n_county = self._count_approved(
+            db, case_type=case_type, carrier=carrier,
+            filter_kind="county_exact", filter_value=jurisdiction,
+        )
+        if n_county >= self.MIN_AGGREGATE_N:
+            return AggregateGateResult(
+                status="sufficient",
+                aggregation_level="county",
+                n=n_county,
+                n_county=n_county,
+                n_state=n_county,  # state tier not queried; echo county as lower bound
+                threshold=self.MIN_AGGREGATE_N,
+                own_case_only=False,
+                suppressed_features=[],
+                jurisdiction=jurisdiction,
+                carrier=carrier,
+                case_type=case_type,
             )
 
-            if jurisdiction:
-                query = query.eq("jurisdiction", jurisdiction)
-            if case_type:
-                query = query.eq("case_type", case_type)
-            if carrier:
-                # Column may not yet exist in all deployments; fail soft to 0.
-                try:
-                    query = query.eq("carrier_id", carrier)
-                except Exception:
-                    logger.debug("carrier filter skipped (column absent).")
-
-            result = query.execute()
-            n = int(getattr(result, "count", 0) or 0)
-        except Exception as exc:
-            logger.warning(
-                "IntelligenceGate: count query failed (%s); failing closed.", exc
+        # ---- Tier 2: state-wide + sentinel ----
+        state = _parse_state(jurisdiction)
+        if state is None:
+            # Can't do state fallback without a parseable state suffix.
+            return AggregateGateResult(
+                status="insufficient_data",
+                aggregation_level="none",
+                n=n_county,
+                n_county=n_county,
+                n_state=0,
+                threshold=self.MIN_AGGREGATE_N,
+                own_case_only=True,
+                suppressed_features=list(SUPPRESSED_WHEN_INSUFFICIENT),
+                jurisdiction=jurisdiction,
+                carrier=carrier,
+                case_type=case_type,
             )
-            n = 0
 
-        sufficient = n >= self.MIN_AGGREGATE_N
+        n_state_counties = self._count_approved(
+            db, case_type=case_type, carrier=carrier,
+            filter_kind="state_suffix", filter_value=state,
+        )
+        n_state_sentinel = self._count_approved(
+            db, case_type=case_type, carrier=carrier,
+            filter_kind="state_sentinel", filter_value=state,
+        )
+        n_state = n_state_counties + n_state_sentinel
+
+        if n_state >= self.MIN_AGGREGATE_N:
+            return AggregateGateResult(
+                status="sufficient",
+                aggregation_level="state",
+                n=n_state,
+                n_county=n_county,
+                n_state=n_state,
+                threshold=self.MIN_AGGREGATE_N,
+                own_case_only=False,
+                suppressed_features=[],
+                jurisdiction=jurisdiction,
+                carrier=carrier,
+                case_type=case_type,
+            )
+
+        # Neither tier cleared.
         return AggregateGateResult(
-            status="sufficient" if sufficient else "insufficient_data",
-            n=n,
+            status="insufficient_data",
+            aggregation_level="none",
+            n=max(n_county, n_state),
+            n_county=n_county,
+            n_state=n_state,
             threshold=self.MIN_AGGREGATE_N,
-            own_case_only=(not sufficient),
-            suppressed_features=[] if sufficient else list(SUPPRESSED_WHEN_INSUFFICIENT),
+            own_case_only=True,
+            suppressed_features=list(SUPPRESSED_WHEN_INSUFFICIENT),
             jurisdiction=jurisdiction,
             carrier=carrier,
             case_type=case_type,
         )
+
+    def _count_approved(
+        self,
+        db,
+        *,
+        case_type: Optional[str],
+        carrier: Optional[str],
+        filter_kind: str,
+        filter_value: Optional[str],
+    ) -> int:
+        """
+        Count approved rows with one jurisdiction-shaped filter. Centralises
+        the fail-closed boilerplate so the tier logic stays readable.
+
+        filter_kind in:
+          - "county_exact":    jurisdiction = filter_value
+          - "state_suffix":    jurisdiction ILIKE '%, {state}'   (all counties in state)
+          - "state_sentinel":  jurisdiction ILIKE '{state} (%'    (Unknown-County bucket)
+          - None / missing filter_value returns 0 (no filter = no tier).
+        """
+        if not filter_value:
+            return 0
+        try:
+            query = db.table("settle_contributions").select("id", count="exact").eq(
+                "status", "approved"
+            )
+            if case_type:
+                query = query.eq("case_type", case_type)
+            if carrier:
+                try:
+                    query = query.eq("carrier_id", carrier)
+                except Exception:
+                    logger.debug("carrier filter skipped (column absent).")
+            if filter_kind == "county_exact":
+                query = query.eq("jurisdiction", filter_value)
+            elif filter_kind == "state_suffix":
+                query = query.ilike("jurisdiction", f"%, {filter_value}")
+            elif filter_kind == "state_sentinel":
+                query = query.ilike("jurisdiction", f"{filter_value} (%")
+            else:
+                logger.warning("IntelligenceGate: unknown filter_kind %r", filter_kind)
+                return 0
+            result = query.execute()
+            raw = getattr(result, "count", None)
+            # Strict type check: PostgREST returns count as int in JSON. Anything
+            # else (None, MagicMock, stray object) is treated as 0 — prevents
+            # MagicMock.__int__ (which returns 1) from silently corrupting counts
+            # under tests that don't fully configure the filter chain.
+            if isinstance(raw, bool):
+                return 0
+            if isinstance(raw, int):
+                return raw if raw >= 0 else 0
+            return 0
+        except Exception as exc:
+            logger.warning(
+                "IntelligenceGate: count query failed (kind=%s, value=%r): %s; failing closed.",
+                filter_kind, filter_value, exc,
+            )
+            return 0
+
+
+def _parse_state(jurisdiction: Optional[str]) -> Optional[str]:
+    """Extract 2-letter state code from 'County, ST' format. Returns None
+    if the input is missing or malformed (no comma, empty suffix)."""
+    if not jurisdiction:
+        return None
+    parts = jurisdiction.rsplit(",", 1)
+    if len(parts) != 2:
+        return None
+    state = parts[1].strip()
+    return state or None
 
 
 # ============================================================================

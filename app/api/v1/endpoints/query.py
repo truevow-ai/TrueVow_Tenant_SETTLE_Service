@@ -9,9 +9,8 @@ import logging
 from app.models.case_bank import EstimateRequest, EstimateResponse
 from app.services.estimator import SettlementEstimator
 from app.services.validator import DataValidator
-from app.core.auth import require_any_auth, require_unified_auth, AuthContext
+from app.core.auth import require_any_auth
 from app.core.database import get_db
-from app.core.event_emitter import SettleEventEmitter
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -20,7 +19,7 @@ logger = logging.getLogger(__name__)
 @router.post("/estimate", response_model=EstimateResponse)
 async def estimate_settlement_range(
     request: EstimateRequest,
-    auth: AuthContext = Depends(require_unified_auth)
+    auth: dict = Depends(require_any_auth)
 ):
     """
     Estimate settlement range based on comparable cases.
@@ -58,12 +57,14 @@ async def estimate_settlement_range(
     - All data is anonymized
     """
     try:
-        # Log authenticated user (supports both API Key and Clerk JWT)
+        # Log authenticated user. Legacy APIKeyAuth returns a dict; use .get()
+        # with safe defaults since auth_method/scope/tenant_id are not present
+        # on the legacy contract (they were part of the stashed unified-auth work).
         logger.info(
-            f"Estimate request from user={auth.user_id}, "
-            f"auth_method={auth.auth_method}, "
-            f"scope={auth.scope}, "
-            f"tenant_id={auth.tenant_id}"
+            f"Estimate request from user={auth.get('user_id')}, "
+            f"auth_method={auth.get('auth_method', 'api_key')}, "
+            f"scope={auth.get('scope', 'user')}, "
+            f"tenant_id={auth.get('tenant_id')}"
         )
         
         # Validate query request
@@ -93,20 +94,10 @@ async def estimate_settlement_range(
             f"confidence={response.confidence}, response_time={response.response_time_ms}ms"
         )
         
-        # ── Behavioral event ─────────────────────────────────────────────────
-        emitter = SettleEventEmitter(
-            tenant_id=getattr(auth, "tenant_id", None),
-            user_id=getattr(auth, "user_id", None),
-        )
-        import asyncio
-        asyncio.ensure_future(emitter.emit(
-            "settlement_query_run",
-            metadata={
-                "jurisdiction": request.jurisdiction,
-                "confidence": response.confidence,
-                "n_cases": response.n_cases,
-            },
-        ))
+        # NOTE: behavioral-event emission (SettleEventEmitter) was removed in
+        # Cohort Q because app.core.event_emitter was parked on the stash
+        # branch. Telemetry will be restored when the emitter module is
+        # rewritten; the estimator response contract is unaffected.
         return response
         
     except HTTPException:

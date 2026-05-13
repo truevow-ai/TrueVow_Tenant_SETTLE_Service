@@ -131,6 +131,24 @@ class EstimateResponse(BaseModel):
         default_factory=list,
         description="Dashboard widgets the caller MUST hide when own_case_only=True.",
     )
+
+    # Option D (2026-05-07) — hierarchical aggregation signal.
+    # "county" = county-exact data cleared the floor. Numbers reflect that county.
+    # "state"  = county data was thin; numbers reflect statewide + Unknown-County
+    #            sentinel rows. UI should label ranges as "{state} statewide".
+    # "none"   = neither tier cleared. own_case_only=True alongside.
+    aggregation_level: str = Field(
+        default="county",
+        description="Tier used: 'county' | 'state' | 'none'.",
+    )
+    n_county: int = Field(
+        default=0,
+        description="Approved-row count at exact county match (tier 1).",
+    )
+    n_state: int = Field(
+        default=0,
+        description="Approved-row count at state-wide + sentinel (tier 2).",
+    )
     
     # Comparable cases (for report)
     comparable_cases: List[ComparableCase] = Field(
