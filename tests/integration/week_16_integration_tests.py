@@ -646,10 +646,10 @@ class Week16IntegrationTester:
             
             # Test error handling when service is unavailable
             # The client should return an error dict, not raise exception
-            result = await platform_client.report_usage(
+            result = await platform_client.consume_report(
                 tenant_id="test_tenant",
-                usage_type="test",
-                quantity=1
+                case_id="test_case_id",
+                report_id="test_report_id"
             )
             
             # Verify error handling - should return dict with error info

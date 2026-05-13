@@ -513,8 +513,8 @@ class TestServiceIntegrationClients:
         await client.close()
     
     @pytest.mark.asyncio
-    async def test_platform_client_report_usage(self):
-        """Test Platform Service client report_usage method structure"""
+    async def test_platform_client_consume_report(self):
+        """Test Platform Service client consume_report method structure"""
         platform_client = PlatformServiceClient()
         
         # Verify wrapped client is properly configured
