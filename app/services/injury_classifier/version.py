@@ -10,4 +10,8 @@ historical data can be re-run with the new version and produce side-by-side audi
 of classification changes.
 """
 
-CLASSIFIER_VERSION = "1.0.1"
+CLASSIFIER_VERSION = "1.0.2"
+
+# Used for rows lifted from pre-classifier era (legacy injury_category single-tags).
+# These rows have no rule-engine provenance; classifier_version captures that fact.
+LEGACY_CLASSIFIER_VERSION = "legacy"

@@ -20,7 +20,7 @@ from .schema import (
     ReviewTrigger,
 )
 from .triggers import evaluate_triggers
-from .version import CLASSIFIER_VERSION
+from .version import CLASSIFIER_VERSION, LEGACY_CLASSIFIER_VERSION
 
 __all__ = [
     "classify",
@@ -35,4 +35,5 @@ __all__ = [
     "FATAL_PATHWAY_TAGS",
     "SEVERE_INJURY_TAGS",
     "CLASSIFIER_VERSION",
+    "LEGACY_CLASSIFIER_VERSION",
 ]

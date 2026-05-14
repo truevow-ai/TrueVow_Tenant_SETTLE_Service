@@ -26,7 +26,10 @@ _db_url = (
     or os.getenv("DATABASE_URL")
 )
 if _db_url:
-    config.set_main_option("sqlalchemy.url", _db_url)
+    # Escape '%' for configparser (ConfigParser treats '%' as interpolation syntax).
+    # Supabase passwords commonly contain URL-encoded '@' as '%40' which trips configparser.
+    # See memory: Alembic configparser % escaping for SQLAlchemy URLs.
+    config.set_main_option("sqlalchemy.url", _db_url.replace("%", "%%"))
 else:
     raise RuntimeError(
         "Alembic DB URL not set. Export one of: "
