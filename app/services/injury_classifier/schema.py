@@ -59,6 +59,7 @@ class ClassificationSource(str, Enum):
     RULE_ENGINE_WEAK = "rule_engine_weak"                # 0.60-0.69, requires review
     HUMAN_REVIEWED = "human_reviewed"                     # Human confirmed/corrected
     LEGACY_SINGLE_TAG = "legacy_single_tag"               # Pre-existing, not yet reclassified
+    STRUCTURED_FIELD_INFERENCE = "structured_field_inference"  # NEW v1.1.0 — pseudo-narrative from structured fields
     UNCLASSIFIED = "unclassified"                         # No rule matched
 
 

@@ -19,6 +19,7 @@ from .schema import (
     ReviewAction,
     ReviewTrigger,
 )
+from .synth import synthesize_pseudo_narrative
 from .triggers import evaluate_triggers
 from .version import CLASSIFIER_VERSION, LEGACY_CLASSIFIER_VERSION
 
@@ -31,6 +32,7 @@ __all__ = [
     "ReviewTrigger",
     "ReviewAction",
     "evaluate_triggers",
+    "synthesize_pseudo_narrative",
     "TAG_RULES",
     "FATAL_PATHWAY_TAGS",
     "SEVERE_INJURY_TAGS",
