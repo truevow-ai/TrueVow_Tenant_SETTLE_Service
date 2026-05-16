@@ -9,6 +9,7 @@ falls below the threshold, regardless of legacy multiplier fallbacks.
 from __future__ import annotations
 
 import pytest
+from typing import Optional
 from unittest.mock import MagicMock, AsyncMock
 
 from app.services.intelligence_gate import (
@@ -539,3 +540,260 @@ async def test_estimator_handles_empty_pool_after_state_tier_pass():
     assert "orange county" in j
     assert "193" in j
     assert "soft_tissue" in j or "injury" in j
+
+
+# ---------------------------------------------------------------------------
+# Pilot-mode gate tests (ADR S-2 v2 — Cohort T)
+# ---------------------------------------------------------------------------
+
+from app.core.config import settings as _settle_settings  # noqa: E402
+
+
+def _make_pilot_db_stub(
+    n_county: int,
+    n_state_suffix: int,
+    n_state_sentinel: int,
+    pilot_suffix_rows: Optional[list] = None,
+    pilot_sentinel_rows: Optional[list] = None,
+):
+    """Pilot-aware db stub. Two select shapes coexist:
+
+      1) `.select("id", count="exact")` — production count path. `.execute().count`
+         returns the configured tier count (n_county / n_state_suffix /
+         n_state_sentinel) based on the jurisdiction filter chosen.
+      2) `.select("id, injury_category")` — pilot eligibility path. `.execute().data`
+         returns the pre-configured row list (pilot_suffix_rows /
+         pilot_sentinel_rows) based on the jurisdiction filter chosen.
+    """
+    pilot_suffix_rows = pilot_suffix_rows or []
+    pilot_sentinel_rows = pilot_sentinel_rows or []
+
+    def _terminal(*, count: int = 0, data: Optional[list] = None):
+        r = MagicMock()
+        r.count = count
+        r.data = data if data is not None else []
+        ex = MagicMock()
+        ex.execute.return_value = r
+        return ex
+
+    # Build per-(select-shape, jurisdiction-filter) terminals.
+    count_county = _terminal(count=n_county)
+    count_suffix = _terminal(count=n_state_suffix)
+    count_sentinel = _terminal(count=n_state_sentinel)
+    pilot_suffix = _terminal(data=pilot_suffix_rows)
+    pilot_sentinel = _terminal(data=pilot_sentinel_rows)
+
+    def _make_prefilter(*, is_pilot_select: bool):
+        """Each select-shape gets its own prefilter chain so the dispatch
+        knows which terminal family to route to."""
+        prefilter = MagicMock()
+        prefilter.eq.return_value = prefilter
+
+        def _eq_dispatch(col, val):
+            if col == "jurisdiction":
+                # Pilot helper never uses .eq for jurisdiction (it always
+                # uses .ilike), but production county tier does.
+                return count_county
+            return prefilter
+
+        def _ilike_dispatch(col, pattern):
+            if col != "jurisdiction":
+                return prefilter
+            if pattern.startswith("%,"):
+                return pilot_suffix if is_pilot_select else count_suffix
+            return pilot_sentinel if is_pilot_select else count_sentinel
+
+        prefilter.eq.side_effect = _eq_dispatch
+        prefilter.ilike.side_effect = _ilike_dispatch
+        return prefilter
+
+    count_prefilter = _make_prefilter(is_pilot_select=False)
+    pilot_prefilter = _make_prefilter(is_pilot_select=True)
+
+    select_mock = MagicMock()
+
+    def _select_dispatch(*args, **kwargs):
+        # Production count path: .select("id", count="exact")
+        if kwargs.get("count") == "exact" or (len(args) >= 2 and args[1] == "exact"):
+            terminal = MagicMock()
+            terminal.eq.return_value = count_prefilter
+            return terminal
+        # Pilot path: .select("id, injury_category")
+        if args and isinstance(args[0], str) and "injury_category" in args[0]:
+            terminal = MagicMock()
+            terminal.eq.return_value = pilot_prefilter
+            return terminal
+        # Default — fall back to count terminal
+        terminal = MagicMock()
+        terminal.eq.return_value = count_prefilter
+        return terminal
+
+    select_mock.side_effect = _select_dispatch
+
+    table_mock = MagicMock()
+    table_mock.select = select_mock
+
+    db = MagicMock()
+    db.table.return_value = table_mock
+    return db
+
+
+class TestPilotMode:
+    """Pilot-mode gate threshold (ADR S-2 v2). Verifies sentinel exclusion,
+    feature-flag gating, and county-tier non-relaxation."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_pilot_mode(self, monkeypatch):
+        # Default OFF for every test — each test opts in via monkeypatch.
+        monkeypatch.setattr(_settle_settings, "SETTLE_PILOT_MODE", False)
+
+    @pytest.mark.asyncio
+    async def test_pilot_mode_off_uses_production_floor(self, monkeypatch):
+        """Flag off → pilot path never fires even if user is flagged."""
+        monkeypatch.setattr(_settle_settings, "SETTLE_PILOT_MODE", False)
+        # Pilot rows present but irrelevant — flag is off.
+        pilot_rows = [{"id": f"r{i}", "injury_category": ["traumatic_brain_injury"]} for i in range(15)]
+        db = _make_pilot_db_stub(
+            n_county=5, n_state_suffix=10, n_state_sentinel=5,
+            pilot_suffix_rows=pilot_rows,
+        )
+        gate = IntelligenceGate(db_connection=db)
+
+        result = await gate.check(
+            jurisdiction="Miami-Dade County, FL",
+            case_type="Motor Vehicle Accident",
+            is_pilot_user=True,
+        )
+
+        assert result.status == "insufficient_data"
+        assert result.is_pilot_response is False
+
+    @pytest.mark.asyncio
+    async def test_pilot_mode_on_pilot_user_passes_at_n_10(self, monkeypatch):
+        """Flag on + pilot user + 12 real-tag rows → pilot state-tier sufficient."""
+        monkeypatch.setattr(_settle_settings, "SETTLE_PILOT_MODE", True)
+        pilot_rows = [
+            {"id": f"r{i}", "injury_category": ["traumatic_brain_injury"]}
+            for i in range(12)
+        ]
+        db = _make_pilot_db_stub(
+            n_county=5, n_state_suffix=8, n_state_sentinel=4,
+            pilot_suffix_rows=pilot_rows,
+        )
+        gate = IntelligenceGate(db_connection=db)
+
+        result = await gate.check(
+            jurisdiction="Miami-Dade County, FL",
+            case_type="Motor Vehicle Accident",
+            is_pilot_user=True,
+        )
+
+        assert result.status == "sufficient"
+        assert result.aggregation_level == "state"
+        assert result.is_pilot_response is True
+        assert result.threshold == IntelligenceGate.PILOT_MIN_AGGREGATE_N
+        assert result.n == 12
+        assert result.n_state == 12
+        assert result.suppressed_features == []
+
+    @pytest.mark.asyncio
+    async def test_pilot_mode_sentinel_only_rows_excluded(self, monkeypatch):
+        """30 rows with ONLY sentinel tags → pilot_eligible=0 → insufficient."""
+        monkeypatch.setattr(_settle_settings, "SETTLE_PILOT_MODE", True)
+        sentinel_rows = [
+            {"id": f"s{i}", "injury_category": ["general_personal_injury"]}
+            for i in range(30)
+        ]
+        db = _make_pilot_db_stub(
+            n_county=5, n_state_suffix=20, n_state_sentinel=10,
+            pilot_suffix_rows=sentinel_rows[:20],
+            pilot_sentinel_rows=sentinel_rows[20:],
+        )
+        gate = IntelligenceGate(db_connection=db)
+
+        result = await gate.check(
+            jurisdiction="Miami-Dade County, FL",
+            case_type="Motor Vehicle Accident",
+            is_pilot_user=True,
+        )
+
+        assert result.status == "insufficient_data"
+        assert result.is_pilot_response is False
+
+    @pytest.mark.asyncio
+    async def test_pilot_mode_mixed_tags_partially_counts(self, monkeypatch):
+        """Rows with at least one real InjuryTag count, even alongside sentinels."""
+        monkeypatch.setattr(_settle_settings, "SETTLE_PILOT_MODE", True)
+        mixed_rows = [
+            {
+                "id": f"m{i}",
+                "injury_category": ["general_personal_injury", "traumatic_brain_injury"],
+            }
+            for i in range(15)
+        ]
+        db = _make_pilot_db_stub(
+            n_county=5, n_state_suffix=10, n_state_sentinel=5,
+            pilot_suffix_rows=mixed_rows,
+        )
+        gate = IntelligenceGate(db_connection=db)
+
+        result = await gate.check(
+            jurisdiction="Miami-Dade County, FL",
+            case_type="Motor Vehicle Accident",
+            is_pilot_user=True,
+        )
+
+        assert result.status == "sufficient"
+        assert result.is_pilot_response is True
+        assert result.n == 15
+
+    @pytest.mark.asyncio
+    async def test_pilot_mode_non_pilot_user_uses_production_floor(self, monkeypatch):
+        """Flag on but is_pilot_user=False → pilot path skipped."""
+        monkeypatch.setattr(_settle_settings, "SETTLE_PILOT_MODE", True)
+        pilot_rows = [
+            {"id": f"r{i}", "injury_category": ["traumatic_brain_injury"]}
+            for i in range(15)
+        ]
+        db = _make_pilot_db_stub(
+            n_county=5, n_state_suffix=10, n_state_sentinel=5,
+            pilot_suffix_rows=pilot_rows,
+        )
+        gate = IntelligenceGate(db_connection=db)
+
+        result = await gate.check(
+            jurisdiction="Miami-Dade County, FL",
+            case_type="Motor Vehicle Accident",
+            is_pilot_user=False,
+        )
+
+        assert result.status == "insufficient_data"
+        assert result.is_pilot_response is False
+
+    @pytest.mark.asyncio
+    async def test_pilot_mode_county_tier_still_requires_production_floor(self, monkeypatch):
+        """County=30 (below 50) + state pilot-eligible=12 → pilot state-tier,
+        NOT a county-tier relaxation. Pilot mode never bypasses county floor."""
+        monkeypatch.setattr(_settle_settings, "SETTLE_PILOT_MODE", True)
+        pilot_rows = [
+            {"id": f"r{i}", "injury_category": ["traumatic_brain_injury"]}
+            for i in range(12)
+        ]
+        db = _make_pilot_db_stub(
+            n_county=30, n_state_suffix=8, n_state_sentinel=4,
+            pilot_suffix_rows=pilot_rows,
+        )
+        gate = IntelligenceGate(db_connection=db)
+
+        result = await gate.check(
+            jurisdiction="Miami-Dade County, FL",
+            case_type="Motor Vehicle Accident",
+            is_pilot_user=True,
+        )
+
+        assert result.status == "sufficient"
+        assert result.aggregation_level == "state"
+        assert result.is_pilot_response is True
+        assert result.n_county == 30  # production county count surfaced for transparency
+        assert result.n == 12
+

@@ -61,6 +61,13 @@ class SettleContribution(BaseModel):
     is_outlier: bool = False
     confidence_score: float = Field(default=1.0, ge=0.0, le=1.0)
 
+    # Real-prose narrative (Phase 3.5). Populated for ~70% of approved rows.
+    # Used by the pilot-mode displayable-cases gate (ADR S-2 v2) to filter
+    # comparable_cases to UI-displayable rows. Optional/nullable — rows
+    # without real prose pass production gates but are excluded from the
+    # pilot response's comparable_cases list.
+    case_narrative: Optional[str] = None
+
 
 # ============================================================================
 # API REQUEST/RESPONSE MODELS
@@ -148,6 +155,19 @@ class EstimateResponse(BaseModel):
     n_state: int = Field(
         default=0,
         description="Approved-row count at state-wide + sentinel (tier 2).",
+    )
+
+    # Pilot-mode signal (ADR S-2 v2). True when the response was produced
+    # via the pilot-mode gate path (state-tier with sentinel exclusion +
+    # narrative floor). UI MUST render pilot-phase disclosure when True.
+    # Confidence label is NOT overridden — it remains a statistical measure;
+    # this bool is the dedicated UI signal.
+    is_pilot_response: bool = Field(
+        default=False,
+        description=(
+            "True when this estimate was produced via the pilot-mode gate "
+            "path. UI MUST render pilot-phase disclosure when True."
+        ),
     )
     
     # Comparable cases (for report)

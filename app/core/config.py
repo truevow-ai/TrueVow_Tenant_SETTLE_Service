@@ -237,6 +237,17 @@ class Settings(BaseSettings):
     FEATURE_PDF_GENERATION: bool = True
     FEATURE_BLOCKCHAIN_VERIFICATION: bool = True
     FEATURE_AUTO_APPROVAL: bool = False
+
+    # Pilot Mode (ADR S-2 v2 — pilot-mode gate threshold for self-funded launch)
+    # See docs/01-main/adr/ADR_20260516_pilot_mode_gate_threshold.md
+    # Production gate (MIN_AGGREGATE_N=50) is unchanged for non-pilot users.
+    # When SETTLE_PILOT_MODE=true AND user_id in SETTLE_PILOT_USER_IDS AND
+    # state-tier pilot-eligible n>=10 AND >=5 narrative-bearing comparable
+    # cases exist, serve state-tier estimate with pilot disclosure.
+    SETTLE_PILOT_MODE: bool = False
+    SETTLE_PILOT_GATE_FLOOR: int = 10
+    SETTLE_PILOT_NARRATIVE_FLOOR: int = 5
+    SETTLE_PILOT_USER_IDS: str = ""  # Comma-separated user IDs
     
     # Monitoring
     SENTRY_DSN: Optional[str] = None

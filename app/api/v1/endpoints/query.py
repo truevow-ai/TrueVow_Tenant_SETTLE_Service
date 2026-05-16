@@ -10,6 +10,7 @@ from app.models.case_bank import EstimateRequest, EstimateResponse
 from app.services.estimator import SettlementEstimator
 from app.services.validator import DataValidator
 from app.core.auth import require_any_auth
+from app.core.config import settings
 from app.core.database import get_db
 
 router = APIRouter()
@@ -85,8 +86,25 @@ async def estimate_settlement_range(
         # Initialize estimator service
         estimator = SettlementEstimator(db_connection=db)
         
+        # Pilot-mode user identification (ADR S-2 v2). Pulls comma-separated
+        # user IDs from SETTLE_PILOT_USER_IDS env var. The flag alone never
+        # relaxes production gates — it must combine with SETTLE_PILOT_MODE=true
+        # AND the gate's pilot-eligible n>=10 AND the displayable-cases floor.
+        # No fallback to `api_key` — require_any_auth's contract surfaces
+        # `user_id` directly; missing user_id means the caller cannot be a
+        # pilot user (fail-closed).
+        user_id = auth.get("user_id", "") or ""
+        pilot_user_ids = {
+            uid.strip()
+            for uid in (settings.SETTLE_PILOT_USER_IDS or "").split(",")
+            if uid.strip()
+        }
+        is_pilot_user = bool(user_id) and str(user_id) in pilot_user_ids
+        
         # Calculate settlement range
-        response = await estimator.estimate_settlement_range(request)
+        response = await estimator.estimate_settlement_range(
+            request, is_pilot_user=is_pilot_user,
+        )
         
         logger.info(
             f"Settlement range estimated for {request.jurisdiction}: "

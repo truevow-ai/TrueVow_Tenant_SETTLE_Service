@@ -29,6 +29,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
 from app.core.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,14 @@ class AggregateGateResult(BaseModel):
     jurisdiction: Optional[str] = Field(None, description="Filter echoed back for logging.")
     carrier: Optional[str] = Field(None, description="Filter echoed back for logging.")
     case_type: Optional[str] = Field(None, description="Filter echoed back for logging.")
+    is_pilot_response: bool = Field(
+        default=False,
+        description=(
+            "True when this result was produced via the pilot-mode gate path "
+            "(ADR S-2 v2). UI MUST render pilot-phase disclosure when True. "
+            "Always False for production county/state-tier responses."
+        ),
+    )
 
 
 # ============================================================================
@@ -115,6 +124,28 @@ class IntelligenceGate:
     """
 
     MIN_AGGREGATE_N: int = MIN_AGGREGATE_N
+    # Pilot-mode floors (ADR S-2 v2). Production gate is UNCHANGED for
+    # non-pilot users — these only apply when SETTLE_PILOT_MODE is on AND
+    # the caller is a flagged pilot user AND production gate already failed.
+    PILOT_MIN_AGGREGATE_N: int = 10
+    PILOT_NARRATIVE_FLOOR: int = 5
+
+    # Legacy / sentinel injury tags that do NOT count toward pilot-mode
+    # eligibility. These are NOT in the closed-set InjuryTag taxonomy — they
+    # represent unclassified data, scraper fallbacks, or case-type leakage
+    # erroneously stored in the injury_category column. Pilot mode demands
+    # at least one real InjuryTag value per row before the row counts.
+    INJURY_PILOT_INELIGIBLE: frozenset = frozenset({
+        "general_personal_injury",   # scraper fallback when no specific injury extractable
+        "motor_vehicle_accident",    # case-type leakage as injury value
+        "Unspecified",               # Phase 3.B scrub target, defense-in-depth
+        "unspecified",
+        "UNSPECIFIED",
+        "Unknown",
+        "unknown",
+        "N/A",
+        "n/a",
+    })
 
     def __init__(self, db_connection=None):
         """
@@ -129,6 +160,7 @@ class IntelligenceGate:
         jurisdiction: Optional[str] = None,
         carrier: Optional[str] = None,
         case_type: Optional[str] = None,
+        is_pilot_user: bool = False,
     ) -> AggregateGateResult:
         """
         Hierarchical gate check. Counts approved rows at two tiers and
@@ -229,6 +261,38 @@ class IntelligenceGate:
                 case_type=case_type,
             )
 
+        # ---- Pilot-mode state-tier path (ADR S-2 v2) ----
+        # Only fires when production state-tier failed AND the caller is a
+        # flagged pilot user AND the feature flag is on. Counts ONLY rows
+        # with at least one real InjuryTag enum value in injury_category
+        # (sentinel-tag rows are excluded). Returns is_pilot_response=True
+        # so the estimator can apply the displayable-cases secondary gate
+        # and inject pilot disclosure copy.
+        if settings.SETTLE_PILOT_MODE and is_pilot_user:
+            pilot_n = self._count_pilot_eligible_state(
+                db, state=state, case_type=case_type, carrier=carrier,
+            )
+            if pilot_n >= self.PILOT_MIN_AGGREGATE_N:
+                logger.info(
+                    "IntelligenceGate: pilot-mode state-tier sufficient "
+                    "(pilot_n=%d, prod_n_state=%d, jurisdiction=%r, case_type=%r)",
+                    pilot_n, n_state, jurisdiction, case_type,
+                )
+                return AggregateGateResult(
+                    status="sufficient",
+                    aggregation_level="state",
+                    n=pilot_n,
+                    n_county=n_county,
+                    n_state=pilot_n,
+                    threshold=self.PILOT_MIN_AGGREGATE_N,
+                    own_case_only=False,
+                    suppressed_features=[],
+                    jurisdiction=jurisdiction,
+                    carrier=carrier,
+                    case_type=case_type,
+                    is_pilot_response=True,
+                )
+
         # Neither tier cleared.
         return AggregateGateResult(
             status="insufficient_data",
@@ -303,6 +367,91 @@ class IntelligenceGate:
             )
             return 0
 
+    def _count_pilot_eligible_state(
+        self,
+        db,
+        *,
+        state: str,
+        case_type: Optional[str],
+        carrier: Optional[str],
+    ) -> int:
+        """Count approved state-tier rows whose `injury_category` contains at
+        least one value from the closed-set InjuryTag enum (i.e., NOT only
+        sentinel/legacy tags). Used for pilot-mode gate eligibility per
+        ADR S-2 v2 sentinel exclusion.
+
+        Implementation: pulls injury_category for state-tier rows (suffix +
+        sentinel-bucket) via two PostgREST queries (matching the existing
+        state-tier query split in estimator._query_state_tier), then applies
+        a Python-side filter against the InjuryTag enum. Avoids relying on
+        wrapper-specific array-overlap operators — see Cohort T surface-back
+        trigger #2.
+
+        Returns 0 fail-closed on any exception.
+        """
+        try:
+            from app.services.injury_classifier import InjuryTag
+        except Exception as exc:  # pragma: no cover
+            logger.warning(
+                "IntelligenceGate: InjuryTag import failed (%s); pilot count = 0.",
+                exc,
+            )
+            return 0
+
+        valid_tags: frozenset = frozenset(
+            t.value for t in InjuryTag
+            if t.value not in self.INJURY_PILOT_INELIGIBLE
+        )
+
+        def _pull(filter_kind: str, filter_value: str) -> List[dict]:
+            try:
+                query = db.table("settle_contributions").select(
+                    "id, injury_category"
+                ).eq("status", "approved")
+                if case_type:
+                    query = query.eq("case_type", case_type)
+                if carrier:
+                    try:
+                        query = query.eq("carrier_id", carrier)
+                    except Exception:
+                        logger.debug("carrier filter skipped (column absent).")
+                if filter_kind == "state_suffix":
+                    query = query.ilike("jurisdiction", f"%, {filter_value}")
+                elif filter_kind == "state_sentinel":
+                    query = query.ilike("jurisdiction", f"{filter_value} (%")
+                else:
+                    return []
+                rows = query.execute().data or []
+                # Tolerate MagicMock surfaces in tests — only accept lists.
+                return rows if isinstance(rows, list) else []
+            except Exception as exc:
+                logger.warning(
+                    "IntelligenceGate: pilot pull failed (kind=%s, state=%r): %s; "
+                    "failing closed for this slice.",
+                    filter_kind, filter_value, exc,
+                )
+                return []
+
+        rows_a = _pull("state_suffix", state)
+        rows_b = _pull("state_sentinel", state)
+
+        # Dedupe by id; count only rows with at least one valid InjuryTag.
+        seen: set = set()
+        eligible = 0
+        for row in rows_a + rows_b:
+            if not isinstance(row, dict):
+                continue
+            rid = row.get("id")
+            if rid in seen:
+                continue
+            seen.add(rid)
+            tags = row.get("injury_category") or []
+            if not isinstance(tags, list):
+                continue
+            if any(t in valid_tags for t in tags):
+                eligible += 1
+        return eligible
+
 
 def _parse_state(jurisdiction: Optional[str]) -> Optional[str]:
     """Extract 2-letter state code from 'County, ST' format. Returns None
@@ -324,6 +473,7 @@ async def check_aggregate_availability(
     jurisdiction: Optional[str] = None,
     carrier: Optional[str] = None,
     case_type: Optional[str] = None,
+    is_pilot_user: bool = False,
 ) -> AggregateGateResult:
     """
     One-shot convenience wrapper for callers that do not want to instantiate
@@ -331,5 +481,6 @@ async def check_aggregate_availability(
     for hot paths, construct an IntelligenceGate(db) and reuse it.
     """
     return await IntelligenceGate().check(
-        jurisdiction=jurisdiction, carrier=carrier, case_type=case_type
+        jurisdiction=jurisdiction, carrier=carrier, case_type=case_type,
+        is_pilot_user=is_pilot_user,
     )

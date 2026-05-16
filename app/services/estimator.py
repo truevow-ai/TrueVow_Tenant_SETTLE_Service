@@ -70,14 +70,19 @@ class SettlementEstimator:
     
     async def estimate_settlement_range(
         self,
-        request: EstimateRequest
+        request: EstimateRequest,
+        is_pilot_user: bool = False,
     ) -> EstimateResponse:
         """
         Estimate settlement range based on comparable cases.
-        
+
         Args:
             request: Estimate request with injury type, jurisdiction, medical bills
-            
+            is_pilot_user: When True, the gate is invoked in pilot-mode-aware
+                mode (ADR S-2 v2). Pilot mode is additionally gated by
+                settings.SETTLE_PILOT_MODE; the param alone never relaxes
+                production gates.
+
         Returns:
             EstimateResponse with percentile ranges and comparable cases
         """
@@ -87,9 +92,14 @@ class SettlementEstimator:
         # Gate checks county-exact first, then state-wide+sentinel; returns
         # aggregation_level in {county, state, none}. If neither tier clears
         # n>=50, we short-circuit to own-case-only — no multiplier fallback.
+        # Pilot-mode (ADR S-2 v2) opens an additional state-tier path at n>=10
+        # for flagged users when the production gate fails; gate sets
+        # is_pilot_response=True so we apply the displayable-cases secondary
+        # gate and inject pilot disclosure copy below.
         gate_result = await self.gate.check(
             jurisdiction=request.jurisdiction,
             case_type=request.case_type,
+            is_pilot_user=is_pilot_user,
         )
         if gate_result.status == "insufficient_data":
             response_time_ms = int(
@@ -183,6 +193,54 @@ class SettlementEstimator:
                 response_time_ms=response_time_ms,
             )
 
+        # Pilot-mode displayable-cases secondary gate (ADR S-2 v2).
+        # When the gate returned via the pilot path, require at least
+        # PILOT_NARRATIVE_FLOOR cases with non-NULL/non-empty case_narrative
+        # before serving an estimate. Rows without real prose are excluded
+        # from the comparable_cases shown to the attorney; the n_cases
+        # surfaced to the UI is the displayable count, not the gate's
+        # pre-filter count. Falls through to suppressed if the floor isn't met.
+        if gate_result.is_pilot_response:
+            narrative_bearing = [
+                c for c in comparable_cases
+                if getattr(c, "case_narrative", None)
+                and str(c.case_narrative).strip()
+            ]
+            if len(narrative_bearing) < IntelligenceGate.PILOT_NARRATIVE_FLOOR:
+                response_time_ms = int(
+                    (datetime.now(UTC) - start_time).total_seconds() * 1000
+                )
+                logger.info(
+                    "Estimator: pilot-mode response suppressed — "
+                    "narrative-bearing displayable cases (%d) below floor (%d).",
+                    len(narrative_bearing),
+                    IntelligenceGate.PILOT_NARRATIVE_FLOOR,
+                )
+                return EstimateResponse(
+                    percentile_25=0.0,
+                    median=0.0,
+                    percentile_75=0.0,
+                    percentile_95=0.0,
+                    n_cases=len(narrative_bearing),
+                    confidence="insufficient_data",
+                    own_case_only=True,
+                    suppressed_features=list(SUPPRESSED_WHEN_INSUFFICIENT),
+                    aggregation_level="none",
+                    n_county=gate_result.n_county,
+                    n_state=gate_result.n_state,
+                    comparable_cases=[],
+                    range_justification=(
+                        f"Pilot-mode aggregation cleared the gate (n={gate_result.n}) "
+                        f"but only {len(narrative_bearing)} comparable cases have "
+                        f"full case narratives. Pilot mode requires at least "
+                        f"{IntelligenceGate.PILOT_NARRATIVE_FLOOR} narrative-bearing "
+                        f"cases for honest disclosure; aggregate ranges suppressed."
+                    ),
+                    response_time_ms=response_time_ms,
+                    is_pilot_response=False,
+                )
+            comparable_cases = narrative_bearing
+
         # Step 2: Calculate ranges via percentile method.
         ranges, confidence = self._calculate_percentile_ranges(
             comparable_cases,
@@ -192,7 +250,8 @@ class SettlementEstimator:
         # Step 3: Select representative comparable cases for report
         sample_cases = self._select_representative_cases(comparable_cases, limit=10)
         
-        # Step 4: Generate justification (tier-aware copy)
+        # Step 4: Generate justification (tier-aware copy, with pilot disclosure
+        # injection when gate returned via pilot path).
         justification = self._generate_justification(
             n_cases=len(comparable_cases),
             confidence=confidence,
@@ -201,11 +260,16 @@ class SettlementEstimator:
             aggregation_level=gate_result.aggregation_level,
             n_county=gate_result.n_county,
             n_state=gate_result.n_state,
+            is_pilot_response=gate_result.is_pilot_response,
         )
-        
+
         # Calculate response time
         response_time_ms = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
-        
+
+        # NOTE (ADR S-2 v2): confidence is NOT overridden in the pilot path.
+        # The is_pilot_response bool is the dedicated UI signal; confidence
+        # remains a statistical measure (high/medium/low) for downstream
+        # consumers — preserves the existing response contract.
         return EstimateResponse(
             percentile_25=ranges["p25"],
             median=ranges["median"],
@@ -218,7 +282,8 @@ class SettlementEstimator:
             n_state=gate_result.n_state,
             comparable_cases=sample_cases,
             range_justification=justification,
-            response_time_ms=response_time_ms
+            response_time_ms=response_time_ms,
+            is_pilot_response=gate_result.is_pilot_response,
         )
     
     async def _query_comparable_cases(
@@ -514,16 +579,49 @@ class SettlementEstimator:
         aggregation_level: str = "county",
         n_county: int = 0,
         n_state: int = 0,
+        is_pilot_response: bool = False,
     ) -> str:
         """
         Generate tier-aware range justification text for report.
 
-        Two tiers (Option D):
-          - county: numbers reflect the requested county specifically.
-          - state:  numbers reflect statewide + Unknown-County sentinel rows.
-                    Copy tells the attorney that county-specific precision
-                    is still being aggregated.
+        Three tiers (Option D + ADR S-2 v2):
+          - county:   numbers reflect the requested county specifically.
+          - state:    numbers reflect statewide + Unknown-County sentinel rows.
+                      Copy tells the attorney that county-specific precision
+                      is still being aggregated.
+          - pilot:    pilot-mode response (ADR S-2 v2). Copy includes explicit
+                      "PILOT — Limited Data" disclosure and confirms all
+                      n_cases shown have full case narratives. is_pilot_response
+                      gates this branch regardless of aggregation_level.
         """
+        # Pilot-mode disclosure copy supersedes the county/state branches.
+        # The justification is the primary attorney-facing transparency
+        # surface for ADR S-2 — must be unambiguous about sample size and
+        # statewide aggregation.
+        if is_pilot_response:
+            try:
+                state_label = request.jurisdiction.rsplit(",", 1)[1].strip()
+            except (IndexError, AttributeError):
+                state_label = "your state"
+            injuries_label = ", ".join(request.injury_category) if request.injury_category else "the requested injury"
+            ranges_sentence = (
+                f"Median: ${ranges['median']:,.0f}. "
+                f"Range (25th–75th): ${ranges['p25']:,.0f}–${ranges['p75']:,.0f}. "
+                f"95th percentile: ${ranges['p95']:,.0f}."
+            )
+            return (
+                f"⚠ PILOT MODE — Limited Sample Size (n={n_cases} comparable cases).\n\n"
+                f"Based on {n_cases} {state_label} {request.case_type} verdicts "
+                f"matching {injuries_label}. {ranges_sentence}\n\n"
+                f"This estimate uses STATEWIDE aggregation — county-specific data "
+                f"for {request.jurisdiction} is still being aggregated. SETTLE is "
+                f"currently in pilot phase with limited data. As more {state_label} "
+                f"cases enter the database, county-specific precision will become "
+                f"available.\n\n"
+                f"⚠ All {n_cases} comparable cases shown below have full case "
+                f"narratives. Review them to assess fit for your case."
+            )
+
         if confidence == "high":
             method = f"based on analysis of {n_cases} highly comparable cases"
         elif confidence == "medium":
