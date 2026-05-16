@@ -329,3 +329,124 @@ async def test_end_to_end_workflow(auth_headers, patch_gate_sufficient):
     assert estimate["n_cases"] > 0
     assert report["report_id"] is not None
     assert report["ots_hash"] is not None
+
+
+class TestPilotUserIdentification:
+    """
+    Cohort U-back: X-Settle-User-Id header bridge for proxy-mediated pilot
+    identification (ADR S-2 + 2026-05-16 addendum).
+
+    Verifies the endpoint's user_id resolution layer (NOT the gate's pilot
+    relaxation logic, which is covered in test_intelligence_gate.py and
+    test_estimator.py). The contract under test:
+      - When a trusted proxy forwards X-Settle-User-Id and that ID is in
+        the SETTLE_PILOT_USER_IDS allowlist, is_pilot_user=True is passed
+        downstream.
+      - Without the header, the API-key-owner user_id is used (legacy /
+        direct-call path).
+      - A forwarded ID outside the allowlist resolves to is_pilot_user=False.
+
+    Mock-mode auth (conftest.py + auth.py L172-182) returns user_id=
+    "mock_user_123", which serves as the API-key-owner ID for the fallback
+    test below.
+    """
+
+    _BASE_REQUEST = {
+        "jurisdiction": "Maricopa County, AZ",
+        "case_type": "Auto Accident",
+        "injury_category": ["Spinal Injury"],
+        "medical_bills": 50000.00,
+    }
+
+    @staticmethod
+    def _spy_estimator(captured: dict):
+        """
+        Build a patch context that spies on the estimator's is_pilot_user
+        kwarg without altering its real behavior. Returns the patcher
+        and the spy coroutine so callers can compose with `with` blocks.
+        """
+        from app.services.estimator import SettlementEstimator
+
+        original = SettlementEstimator.estimate_settlement_range
+
+        async def spy(self, request, is_pilot_user: bool = False):
+            captured["is_pilot_user"] = is_pilot_user
+            return await original(self, request, is_pilot_user=is_pilot_user)
+
+        return patch.object(
+            SettlementEstimator, "estimate_settlement_range", spy
+        )
+
+    def test_x_settle_user_id_header_overrides_api_key_owner(
+        self, auth_headers, monkeypatch, patch_gate_sufficient
+    ):
+        """Header user in allowlist → is_pilot_user=True passed to estimator."""
+        from app.core.config import settings as _settings
+
+        monkeypatch.setattr(_settings, "SETTLE_PILOT_MODE", True)
+        monkeypatch.setattr(_settings, "SETTLE_PILOT_USER_IDS", "clerk_user_abc123")
+
+        captured: dict = {}
+        with self._spy_estimator(captured):
+            response = client.post(
+                "/api/v1/query/estimate",
+                json=self._BASE_REQUEST,
+                headers={
+                    **auth_headers,
+                    "X-Settle-User-Id": "clerk_user_abc123",
+                },
+            )
+
+        assert response.status_code == 200
+        assert captured["is_pilot_user"] is True
+
+    def test_no_x_settle_user_id_header_falls_back_to_api_key_owner(
+        self, auth_headers, monkeypatch, patch_gate_sufficient
+    ):
+        """
+        No forwarded header → API-key-owner user_id is used. In mock mode
+        the owner id is "mock_user_123", so allowlisting it yields
+        is_pilot_user=True, proving the fallback path works.
+        """
+        from app.core.config import settings as _settings
+
+        monkeypatch.setattr(_settings, "SETTLE_PILOT_MODE", True)
+        monkeypatch.setattr(_settings, "SETTLE_PILOT_USER_IDS", "mock_user_123")
+
+        captured: dict = {}
+        with self._spy_estimator(captured):
+            response = client.post(
+                "/api/v1/query/estimate",
+                json=self._BASE_REQUEST,
+                headers=auth_headers,
+            )
+
+        assert response.status_code == 200
+        assert captured["is_pilot_user"] is True
+
+    def test_x_settle_user_id_not_in_allowlist_is_not_pilot(
+        self, auth_headers, monkeypatch, patch_gate_sufficient
+    ):
+        """
+        Forwarded ID outside allowlist → is_pilot_user=False even though
+        SETTLE_PILOT_MODE is on. Confirms the override does not auto-grant
+        pilot status; allowlist membership remains the gate.
+        """
+        from app.core.config import settings as _settings
+
+        monkeypatch.setattr(_settings, "SETTLE_PILOT_MODE", True)
+        monkeypatch.setattr(_settings, "SETTLE_PILOT_USER_IDS", "clerk_user_abc123")
+
+        captured: dict = {}
+        with self._spy_estimator(captured):
+            response = client.post(
+                "/api/v1/query/estimate",
+                json=self._BASE_REQUEST,
+                headers={
+                    **auth_headers,
+                    "X-Settle-User-Id": "clerk_user_NOT_IN_ALLOWLIST",
+                },
+            )
+
+        assert response.status_code == 200
+        assert captured["is_pilot_user"] is False

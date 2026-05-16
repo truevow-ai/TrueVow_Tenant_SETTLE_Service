@@ -162,3 +162,63 @@ Once all pilot users have graduated, set `SETTLE_PILOT_MODE = False`.
 Accepted and shipped under Cohort T. Default flag state is OFF
 (`SETTLE_PILOT_MODE = False`). Pilot launch is a configuration change, not a
 code release.
+
+## Addendum (2026-05-16): X-Settle-User-Id Header Bridge for Frontend Integration
+
+**Cohort:** U-back
+**Scope:** Backend-only; one endpoint, three tests, one doc append.
+
+### Problem
+
+ADR S-2 v2 specified `auth.user_id` as the source of pilot identification, but
+the customer portal proxy holds a shared service-to-service `X-API-Key`. Under
+that key, every request resolves to the same `user_id` (the API-key owner),
+making per-end-user pilot identification impossible. The bridge from the
+portal's authenticated Clerk userId to the backend's `user_id` was missing.
+
+### Decision
+
+The `/api/v1/query/estimate` endpoint accepts an optional `X-Settle-User-Id`
+sidecar header. When present **and** the auth path is API-key, it overrides the
+API-key-owner `user_id` for pilot identification. Without the header, the
+legacy/direct-call path (API-key-owner) is used.
+
+### Trust model
+
+The shared service-to-service API key gates the proxy. Any caller possessing
+the shared key can claim any `user_id` via `X-Settle-User-Id`. This is the
+“trust the proxy” pattern, appropriate for backend-to-backend integration
+where the proxy is the security boundary. The proxy holds the secret; it is
+responsible for forwarding only its own authenticated end-user IDs.
+
+### Forward-compatibility guard
+
+The header is honored only when `auth.get("auth_method", "api_key") == "api_key"`.
+The default of `"api_key"` preserves today's single-auth-path behavior
+(`require_any_auth` is API-key-only as of Cohort U-back). When JWT auth lands
+and sets `auth_method="jwt"`, the guard naturally locks the override out,
+preventing JWT-authenticated end-users from impersonating other users via the
+header.
+
+### Allowlist remains authoritative
+
+The forwarded ID must still appear in `SETTLE_PILOT_USER_IDS` to mark the
+request as a pilot. The header is a user-id source, not a pilot-grant.
+
+### Future direction
+
+Migrate to Clerk JWT directly (Bearer token validated against Clerk JWKS at
+the backend). This removes the trust-the-proxy pattern entirely and lets the
+backend cryptographically verify end-user identity. Deferred to ADR S-3
+(frontend auth modernization) when warranted by scale or security audit. At
+that point the `X-Settle-User-Id` path can be deprecated and removed.
+
+### Verification
+
+- `tests/test_functional.py::TestPilotUserIdentification` — 3 tests:
+  - `test_x_settle_user_id_header_overrides_api_key_owner` (header user in
+    allowlist → `is_pilot_user=True`).
+  - `test_no_x_settle_user_id_header_falls_back_to_api_key_owner`
+    (no header → API-key-owner user_id used).
+  - `test_x_settle_user_id_not_in_allowlist_is_not_pilot` (forwarded id
+    outside allowlist → `is_pilot_user=False`).

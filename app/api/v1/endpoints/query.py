@@ -2,7 +2,7 @@
 Query Endpoints - Settlement Range Estimation
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import Optional
 import logging
 
@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 @router.post("/estimate", response_model=EstimateResponse)
 async def estimate_settlement_range(
     request: EstimateRequest,
+    http_request: Request,
     auth: dict = Depends(require_any_auth)
 ):
     """
@@ -86,14 +87,26 @@ async def estimate_settlement_range(
         # Initialize estimator service
         estimator = SettlementEstimator(db_connection=db)
         
-        # Pilot-mode user identification (ADR S-2 v2). Pulls comma-separated
-        # user IDs from SETTLE_PILOT_USER_IDS env var. The flag alone never
-        # relaxes production gates — it must combine with SETTLE_PILOT_MODE=true
-        # AND the gate's pilot-eligible n>=10 AND the displayable-cases floor.
-        # No fallback to `api_key` — require_any_auth's contract surfaces
-        # `user_id` directly; missing user_id means the caller cannot be a
-        # pilot user (fail-closed).
-        user_id = auth.get("user_id", "") or ""
+        # Pilot-mode user identification (ADR S-2 v2 + 2026-05-16 addendum).
+        # Source of user_id, in priority order:
+        #   1. X-Settle-User-Id header — used when a trusted proxy (e.g., the
+        #      customer portal) forwards the end-user's Clerk userId. Honored
+        #      ONLY when the auth path is API-key, since the trust model is
+        #      "shared X-API-Key gates the proxy" (ADR S-2 addendum). The guard
+        #      defaults `auth_method` to "api_key" so today's single-auth-path
+        #      behavior is preserved; when JWT auth lands and sets
+        #      auth_method="jwt", the guard naturally locks the override out.
+        #   2. API-key-owner user_id — legacy/direct-call path.
+        # No fallback to `api_key` literal — fail-closed if neither surfaces.
+        is_api_key_auth = auth.get("auth_method", "api_key") == "api_key"
+        forwarded_user_id = (
+            http_request.headers.get("X-Settle-User-Id", "").strip()
+            if is_api_key_auth
+            else ""
+        )
+        api_key_owner_id = auth.get("user_id", "") or ""
+        user_id = forwarded_user_id or api_key_owner_id
+
         pilot_user_ids = {
             uid.strip()
             for uid in (settings.SETTLE_PILOT_USER_IDS or "").split(",")
