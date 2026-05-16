@@ -1,89 +1,82 @@
-# WORKING CACHE — SETTLE Service
+# WORKING CACHE — TrueVow Multi-Repo
 
-**Last Updated:** 2026-05-16
-
----
-
-## Repo Info
-
-- **Repo Type:** Python backend (FastAPI) — frontend lives in separate (not-yet-git-tracked) repo
-- **Tech Stack:** Python 3.11 + FastAPI + Pydantic + Alembic + custom SupabaseRESTClient (httpx-based)
-- **Local branch:** `master` → push refspec `master:main` → `origin/main`
-- **GitHub:** `https://github.com/truevow-ai/TrueVow_Tenant_SETTLE_Service.git`
-- **Database client:** `app/services/integrations/supabase_rest_client.py` (chainable query builder, synchronous despite async-flavored). Methods: `.table()`, `.select()`, `.eq()`, `.ilike()` (URL-encoded), `.cs()`, `.order()`, `.limit()`, `.execute()`.
+**Last Updated:** 2026-05-17 (post Cohort V-front-2)
 
 ---
 
-## Truth Commands (Python backend)
+## Repo Map (TWO repos, both git-tracked)
 
+| Repo | Path | Type | Branch refspec |
+|---|---|---|---|
+| **SETTLE backend** | `C:\Users\yasha\OneDrive\Documents\TrueVow\Cursor\TrueVow_Tenant_SETTLE-Service` | Python FastAPI | `master:main` → `origin/main` |
+| **Customer portal** | `C:\Users\yasha\OneDrive\Documents\TrueVow\Cursor\Truevow_Tenant_Customer_Portal_Service` | Next.js 14 (npm) | `master:main` → `origin/main` |
+
+**Git remotes:**
+- Backend: `https://github.com/truevow-ai/TrueVow_Tenant_SETTLE_Service.git`
+- Customer portal: `https://github.com/truevow-ai/TrueVow_Tenant_Customer_Portal_Service.git`
+
+---
+
+## Truth Commands
+
+### Backend (Python)
 ```powershell
-# Tests (43/43 expected)
+cd C:\Users\yasha\OneDrive\Documents\TrueVow\Cursor\TrueVow_Tenant_SETTLE-Service
 python -m pytest tests/ -v 2>&1 | Tee-Object -FilePath logs\pytest.log
-
-# Run service (dev)
-python -m uvicorn app.main:app --reload --port 8002
-
-# Alembic migrations
 alembic upgrade head
 ```
 
-PowerShell quirk: pytest-asyncio deprecation warning hits stderr → PS reports ExitCode 1 (false positive). Verify via summary line `"43 passed in Ns"`.
-
----
-
-## Truth Commands (Frontend, when V-front lands)
-
-Frontend is at `C:\Users\yasha\OneDrive\Documents\TrueVow\Cursor\Truevow_Tenant_Customer_Portal_Service`.
-
+### Customer portal (npm)
 ```powershell
 cd C:\Users\yasha\OneDrive\Documents\TrueVow\Cursor\Truevow_Tenant_Customer_Portal_Service
 npm install
+npm run type-check
 npm run lint
-npm run type-check   # if defined in package.json
 npm run build
-npx playwright test  # if e2e suite present
 ```
-
-Package manager: **npm only** (`package-lock.json` present, no pnpm-lock).
+Package manager: **npm** (`package-lock.json` present, no pnpm-lock).
 
 ---
 
 ## Current Status
 
-**Status:** DONE for backend through Cohort U-back. Awaiting Yasha trigger for next cohort.
+| Concern | State |
+|---|---|
+| Backend HEAD (local = origin/main) | `f97d285` (docs cache refresh) |
+| Customer portal HEAD (local = origin/main) | `5d11ef1` (Cohort V-front-2) |
+| Backend tests | 43/43 PASS |
+| Customer portal typecheck | PASS (0 errors) |
+| Customer portal lint | PASS (exit 0, `next/core-web-vitals`) |
+| Customer portal build | PASS (76/76 static pages) |
+| Pilot infrastructure (backend) | LIVE, DORMANT (default-off flags) |
+| Pilot infrastructure (frontend) | Banner + types + Clerk proxy LIVE; analysis page NOW wired to live API |
+| `.github/workflows/pricing-snapshot.yml` | Untracked on disk — push needs PAT `workflow` scope |
 
-- Backend HEAD: `91a775f` (Cohort U-back X-Settle-User-Id bridge)
-- origin/main: `91a775f` (synced)
-- Tests: 43/43 PASS
-- Pilot Mode infrastructure: LIVE but DORMANT (default-off flags)
-- Customer portal: NOT git-tracked yet (Cohort V-front prep stage initializes it)
+**Overall:** Backend DONE. Customer portal DONE through Cohort V-front-2 (all truth gates pass, analysis page wired to live backend API).
 
 ---
 
-## Active Modules (most recently touched)
+## Active Modules (most recently touched — Cohort V-front-2)
 
-- `app/api/v1/endpoints/query.py` — `/estimate` endpoint with X-Settle-User-Id bridge
-- `app/services/intelligence_gate.py` — county/state/pilot-tier gate
-- `app/services/estimator.py` — pilot-aware integration
-- `app/services/injury_classifier/` — deterministic 17-tag library
-- `tests/conftest.py` — patches `settings.USE_MOCK_DATA` on live singleton
-- `tests/test_functional.py` — includes `TestPilotUserIdentification` (3 new tests)
+- `lib/api/settle-client.ts` — EstimateResponse fully aligned with backend Pydantic shape + ComparableCase type
+- `app/(dashboard)/dashboard/settle/analysis/page.tsx` — MOCK_INTEL removed; live API fetch + PilotModeBanner + own_case_only guardrail
+- `app/(dashboard)/dashboard/settle/query/page.tsx` — updated to use aligned field names (percentile_25/median/percentile_75, confidence, n_cases, query_id)
 
 ---
 
 ## Known Failing Commands
 
-None. All truth commands green.
+**None.** All truth gates pass for both repos.
 
 ---
 
 ## Architectural Anchors (read-only references)
 
-- `docs/01-main/adr/ADR_20260513_deterministic_injury_classifier.md` — ADR S-1.1
-- `docs/01-main/adr/ADR_20260516_pilot_mode_gate_threshold.md` — ADR S-2 + 2026-05-16 X-Settle-User-Id addendum
-- `docs/01-main/MILESTONE_COHORT_T_CHECKPOINT.md` — Pilot Mode landing
-- `docs/01-main/MILESTONE_COHORT_U_BACK_CHECKPOINT.md` — X-Settle-User-Id bridge landing
-- `docs/01-main/IMPLEMENTATION_PROGRESS.md` — full chronology
+- `docs/01-main/MILESTONE_COHORT_V_FRONT_2_CHECKPOINT.md` — most recent unit-of-work
+- `docs/01-main/MILESTONE_COHORT_H_CHECKPOINT.md` — hygiene cohort
+- `docs/01-main/MILESTONE_COHORT_V_FRONT_CHECKPOINT.md` — V-front cohort
+- `docs/01-main/adr/ADR_20260516_pilot_mode_gate_threshold.md` — ADR S-2
+- `.qoder/skills/cross-workspace-shipping.md` — PowerShell + cross-workspace patterns
 
 ---
 
@@ -91,21 +84,23 @@ None. All truth commands green.
 
 | Trigger | Effect |
 |---|---|
-| `go push` | Push current local HEAD to origin (mandatory before any push) |
-| `draft V-front` | Architect-mode: write Cohort V-front directive to file for review |
-| `go V-front` | Execute Cohort V-front end-to-end (touches customer portal repo) |
+| `go push` | Push current local HEAD to origin |
 | `pause` | Stop, hold state |
 
 ---
 
 ## Next Single Action
 
-**Draft or fire Cohort V-front (frontend pilot wiring).**
+**Pick next work item:**
 
-Cohort V-front scope (from outgoing Hyperagent architect's recon):
-1. Prep: git init customer portal, add remote, .gitignore, baseline commit, first push
-2. Feature: forward Clerk userId via `X-Settle-User-Id` proxy header; replace MOCK_INTEL on analysis page; add `PilotModeBanner.tsx`; update `EstimateResponse` interface to include `is_pilot_response`
-3. Tests: Playwright e2e for pilot/production response paths
-4. Build/lint/type-check gates
+1. **Workflow scope grant** — user grants PAT `workflow` scope, push `.github/workflows/pricing-snapshot.yml`.
+2. **MOCK_CASES removal** — analysis page still uses MOCK_CASES for case input display; replace with intake API when intake service is live.
+3. **End-to-end integration test** — deploy backend + portal, verify live billing flow + analysis fetch cycle.
 
-Decisions pre-resolved (per outgoing architect): Auth bridge = Option A header forward; Mock-data scope = replace MOCK_INTEL entirely; Confidence shape = update frontend types to match backend (top-level `confidence: str`).
+---
+
+## Operating mode
+
+**Architect + Executor combined** (interim, since 2026-05-16 when Hyperagent Opus credits depleted).
+
+**Autonomy Calibration in effect:** unit-scoped end-to-end execution; pause-and-surface ONLY on pre-defined triggers (secret leak, fetch returns existing refs, CORS block, gate failure needing arch decision, scope mismatch). End-of-unit report at completion.

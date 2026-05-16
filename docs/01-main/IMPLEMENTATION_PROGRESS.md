@@ -1,8 +1,8 @@
 # SETTLE Service — Implementation Progress
 
-**Last Updated:** 2026-05-16
-**Current Phase:** Cohort U-back complete; Cohort V-front pending
-**Overall Status:** DONE (backend pilot infrastructure live in remote; frontend pilot wiring pending)
+**Last Updated:** 2026-05-17
+**Current Phase:** Cohort V-front-2 shipped (DONE); analysis page wired to live backend API
+**Overall Status:** Backend DONE through Cohort U-back; frontend DONE through Cohort V-front-2 (typecheck + lint + build all PASS)
 
 ---
 
@@ -16,6 +16,38 @@
 ---
 
 ## Milestone / Cohort Summary (chronological, newest first)
+
+### Cohort V-front-2 — Analysis page wired to live backend API ✅ DONE
+**Date:** 2026-05-17 · **Customer portal commit:** `5d11ef1` · **Status:** DONE
+
+- Removed `MOCK_INTEL` constant; analysis page now fetches live estimate via `settleClient.getEstimate()` after billing consume flow
+- Aligned frontend `EstimateResponse` with backend Pydantic shape (flat percentiles, `n_cases`, `confidence`, `ComparableCase[]`, pilot/guardrail fields)
+- `PilotModeBanner` renders when `is_pilot_response === true`; `own_case_only` guardrail banner shows when applicable
+- Updated `settle/query/page.tsx` to use aligned field names
+- Dropped 5 mock-only UI fields per Option A product decision (jurisdiction_weight, confidence_score, confidence_reason, factors, risk_adjustments, insurer_behavior)
+- All truth gates PASS: `npm run type-check` (0 errors), `npm run lint` (exit 0), `npm run build` (76/76 pages)
+- See `docs/01-main/MILESTONE_COHORT_V_FRONT_2_CHECKPOINT.md`
+
+### Cohort H — Customer portal hygiene (TS errors + ESLint + build) ✅ DONE
+**Date:** 2026-05-16 · **Customer portal commit:** `df3e057` · **Status:** DONE
+
+- Cleared all 8 pre-existing TS errors across 5 files (zero new code, just type alignment)
+- Configured ESLint: `next/core-web-vitals` base + `no-unescaped-entities` off
+- Fixed `server-only` import chain in `certificates.ts` (webpackIgnore on dynamic Clerk imports)
+- All truth gates PASS: `npm run type-check` (0 errors), `npm run lint` (exit 0), `npm run build` (76/76 pages)
+- See `docs/01-main/MILESTONE_COHORT_H_CHECKPOINT.md`
+
+### Cohort V-front — Frontend pilot wiring + customer portal repo init ⚠ UNVERIFIED
+**Date:** 2026-05-07 · **Customer portal commits:** `c0e4aa0` (baseline) + `0cbc4c9` (feature) · **Status:** UNVERIFIED
+
+- Customer portal repo initialized at `https://github.com/truevow-ai/TrueVow_Tenant_Customer_Portal_Service.git` (master → main)
+- `components/settle/PilotModeBanner.tsx` NEW — reusable pilot-mode disclosure (ADR S-2 v2 three-layer transparency)
+- `lib/api/settle-client.ts` — 6 additive optional fields on `EstimateResponse` (preserves existing consumer)
+- `app/api/settle/analysis/route.ts` — Clerk `await auth()` + conditional `X-Settle-User-Id` header forward
+- `app/(dashboard)/dashboard/settle/reports/page.tsx` — 6 escape-stripped mock strings restored
+- `.gitignore` — secret protection (`.env.backup*`, `.qoder/`, dev artifacts)
+- **Deferred:** analysis page wire-up (MOCK_INTEL replacement needs product decision); 8 pre-existing TS errors (hygiene cohort); `.github/workflows/pricing-snapshot.yml` push (needs PAT `workflow` scope)
+- See `docs/01-main/MILESTONE_COHORT_V_FRONT_CHECKPOINT.md`
 
 ### Cohort U-back — X-Settle-User-Id header bridge ✅ SHIPPED
 **Date:** 2026-05-16 · **Commit:** `91a775f` · **Status:** DONE (on origin/main)
@@ -93,19 +125,51 @@ Three untracked draft ADRs at `docs/01-main/adr/ADR_20260507_*.md` (demand-drive
 | Concern | State |
 |---|---|
 | Backend HEAD (local + origin/main) | `91a775f` (Cohort U-back) |
-| Commits ahead/behind | 0/0 ✅ |
+| Customer portal HEAD (local + origin/main) | `5d11ef1` (Cohort V-front-2) |
+| Backend commits ahead/behind | 0/0 |
+| Customer portal commits ahead/behind | 0/0 |
 | Backend tests | 43/43 PASS |
-| Pilot infrastructure | Live, DORMANT (default-off flags) |
-| Customer Portal → Backend integration | Proxies exist, MOCK_INTEL still renders, Clerk userId NOT forwarded yet |
+| Customer portal typecheck | PASS (0 errors) |
+| Customer portal lint | PASS (exit 0, `next/core-web-vitals` configured) |
+| Customer portal build | PASS (76/76 static pages) |
+| Pilot infrastructure (backend) | Live, DORMANT (default-off flags) |
+| Pilot infrastructure (frontend) | Banner + types + Clerk proxy + analysis page wire-up ALL LIVE |
+| Customer Portal -> Backend integration | Clerk userId forwarded via `X-Settle-User-Id`; analysis page calls live estimate API after billing flow |
 | Database (Supabase) | 440 approved + 29 pending + 0 rejected = 469 total |
 | Real-county pairs at n≥50 | **0** (max real-county n=3) |
 | Alembic head | `ed2900358f69` |
-| Frontend repo | NOT git-tracked yet |
+| Frontend repo | git-tracked since 2026-05-07 |
 | Stash branch | `abandoned-auth-rewrite-202605` (local-only WIP, future ADR S-4 decision) |
+| GitHub PAT | LACKS `workflow` scope (blocks `.github/workflows/*.yml` push) |
 
 ---
 
-## What changed today (2026-05-16)
+## What changed today (2026-05-17, Cohort V-front-2)
+
+- Aligned frontend `EstimateResponse` with backend Pydantic shape (3 files changed, +257/-173)
+- Removed `MOCK_INTEL` constant; analysis page now wired to live backend API
+- `PilotModeBanner` + `own_case_only` guardrail integrated into analysis page rendering
+- `settle/query/page.tsx` updated to use aligned field names
+- Customer portal committed as `5d11ef1`, pushed to `origin/main`
+
+## What changed 2026-05-16 (Cohort H)
+
+- Cleared all 8 pre-existing TS errors in customer portal (5 files, 7 type fixes)
+- Configured ESLint with `next/core-web-vitals` base + disabled `no-unescaped-entities`
+- Fixed `server-only` webpack import chain in `certificates.ts` (webpackIgnore directive)
+- All three frontend truth gates now PASS: typecheck, lint, build
+- Customer portal status upgraded from UNVERIFIED to DONE through Cohort H
+
+## What changed 2026-05-07
+
+- Cohort V-front shipped end-to-end on combined architect+executor mode (Autonomy Calibration unit-scoped pattern)
+- Customer portal repo initialized — first git history (255 baseline files → 254 after dropping unpushable workflow file)
+- Both customer portal commits live on `origin/main` (`c0e4aa0` baseline + `0cbc4c9` V-front feature)
+- Pilot Mode disclosure infrastructure LIVE in customer portal (dormant until analysis page wire-up cohort)
+- New skill captured: `.qoder/skills/cross-workspace-shipping.md` (PowerShell git hardening + Qoder sandbox + autonomy patterns)
+- New checkpoint: `docs/01-main/MILESTONE_COHORT_V_FRONT_CHECKPOINT.md`
+
+## What changed 2026-05-16
 
 - Pushed Cohort U-back to origin/main (`c43d81a..91a775f`)
 - Backend pilot infrastructure FULL in remote (T v2 + U-back bridge)
@@ -116,9 +180,13 @@ Three untracked draft ADRs at `docs/01-main/adr/ADR_20260507_*.md` (demand-drive
 
 ## Next single action
 
-**Cohort V-front** — Frontend pilot wiring + customer portal git initialization. Awaiting Yasha trigger:
-- `draft V-front` → I draft directive to `docs/01-main/COHORT_V_FRONT_DIRECTIVE.md` for review
-- `go V-front` → I execute end-to-end (git init customer portal + wire pilot bridge + tests)
+**Pick ONE of remaining items:**
+
+1. **Workflow grant** — user grants PAT `workflow` scope, push `.github/workflows/pricing-snapshot.yml`.
+2. **MOCK_CASES removal** — replace case input display with intake API data when intake service is live.
+3. **End-to-end integration test** — deploy backend + portal, verify live billing flow + analysis fetch cycle.
+
+**Recommended:** End-to-end integration test (validates the full V-front-2 wire-up against a running backend).
 
 ---
 
@@ -127,8 +195,9 @@ Three untracked draft ADRs at `docs/01-main/adr/ADR_20260507_*.md` (demand-drive
 **Read these in order for new session orientation:**
 1. `docs/01-main/WORKING_CACHE.md` — current state, truth commands, next action
 2. `docs/01-main/IMPLEMENTATION_PROGRESS.md` — this file
-3. `docs/01-main/MILESTONE_COHORT_U_BACK_CHECKPOINT.md` — most recent unit-of-work
-4. `docs/01-main/adr/ADR_20260516_pilot_mode_gate_threshold.md` — live pilot mode design
+3. `docs/01-main/MILESTONE_COHORT_V_FRONT_2_CHECKPOINT.md` — most recent unit-of-work
+4. `.qoder/skills/cross-workspace-shipping.md` — autonomy + PowerShell + cross-workspace patterns learned in V-front
+5. `docs/01-main/adr/ADR_20260516_pilot_mode_gate_threshold.md` — live pilot mode design
 
 **Don't re-read unless touching:**
 - Implementation files (auth.py, estimator.py, intelligence_gate.py) — stable and tested
