@@ -753,3 +753,442 @@ async def admin_service_health():
         ]
     }
 
+
+# ============================================================================
+# RICH FIELD CONTRIBUTION MANAGEMENT (Cohort W — 2026-05-17)
+# ============================================================================
+
+@router.get("/contributions")
+async def get_all_contributions(
+    status: Optional[str] = Query(None, description="Filter by status: pending, approved, rejected, flagged"),
+    jurisdiction: Optional[str] = Query(None, description="Filter by jurisdiction"),
+    case_type: Optional[str] = Query(None, description="Filter by case type"),
+    insurance_carrier: Optional[str] = Query(None, description="Filter by insurance carrier"),
+    injury_severity: Optional[str] = Query(None, description="Filter by injury severity"),
+    source_type: Optional[str] = Query(None, description="Filter by source type"),
+    is_verdict: Optional[bool] = Query(None, description="Filter by verdict vs settlement"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    admin_data: dict = Depends(require_admin)
+) -> Dict:
+    """
+    Get all contributions with rich field filters.
+    
+    **SaaS Admin Use Case:**
+    - Browse all contributions with advanced filtering
+    - Filter by new rich fields (carrier, severity, source_type, etc.)
+    - Pagination support for large datasets
+    """
+    try:
+        logger.info(f"Admin {admin_data['user_id']} fetching contributions with filters")
+        
+        db = await get_db()
+        
+        if db:
+            query = db.table('settle_contributions').select('*')
+            
+            if status:
+                query = query.eq('status', status)
+            if jurisdiction:
+                query = query.ilike('jurisdiction', f'%{jurisdiction}%')
+            if case_type:
+                query = query.eq('case_type', case_type)
+            if insurance_carrier:
+                query = query.eq('insurance_carrier', insurance_carrier)
+            if injury_severity:
+                query = query.eq('injury_severity', injury_severity)
+            if source_type:
+                query = query.eq('source_type', source_type)
+            if is_verdict is not None:
+                query = query.eq('is_verdict', is_verdict)
+            
+            # Get total count
+            count_query = db.table('settle_contributions').select('id', count='exact')
+            if status:
+                count_query = count_query.eq('status', status)
+            if jurisdiction:
+                count_query = count_query.ilike('jurisdiction', f'%{jurisdiction}%')
+            if case_type:
+                count_query = count_query.eq('case_type', case_type)
+            if insurance_carrier:
+                count_query = count_query.eq('insurance_carrier', insurance_carrier)
+            if injury_severity:
+                count_query = count_query.eq('injury_severity', injury_severity)
+            if source_type:
+                count_query = count_query.eq('source_type', source_type)
+            if is_verdict is not None:
+                count_query = count_query.eq('is_verdict', is_verdict)
+            
+            count_result = count_query.execute()
+            total = count_result.count if hasattr(count_result, 'count') else 0
+            
+            result = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+            
+            return {
+                "contributions": result.data if result.data else [],
+                "total": total,
+                "limit": limit,
+                "offset": offset
+            }
+        else:
+            return {"contributions": [], "total": 0, "limit": limit, "offset": offset}
+    except Exception as e:
+        logger.error(f"Error fetching contributions: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error", "error": str(e)})
+
+
+@router.patch("/contributions/{contribution_id}")
+async def update_contribution_fields(
+    contribution_id: UUID,
+    updates: Dict,
+    admin_data: dict = Depends(require_admin)
+) -> Dict:
+    """
+    Update rich fields on a contribution (admin-only).
+    
+    **SaaS Admin Use Case:**
+    - Manually set insurance_carrier, injury_severity, etc.
+    - Correct scraped data errors
+    - Enrich contributions with additional information
+    """
+    try:
+        logger.info(f"Admin {admin_data['user_id']} updating contribution {contribution_id}")
+        
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        allowed_fields = {
+            'insurance_carrier', 'comparative_negligence_pct', 'exact_outcome_amount',
+            'is_verdict', 'date_of_verdict', 'court_level', 'injury_severity',
+            'policy_limit_amount', 'source_type', 'trial_duration_days',
+            'appeal_filed', 'appeal_outcome', 'status', 'rejection_reason',
+            'is_outlier', 'confidence_score'
+        }
+        
+        filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+        if not filtered_updates:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+        
+        result = db.table('settle_contributions') \
+            .update(filtered_updates) \
+            .eq('id', str(contribution_id)) \
+            .execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Contribution not found")
+        
+        return {"status": "updated", "contribution_id": str(contribution_id), "data": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating contribution {contribution_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error", "error": str(e)})
+
+
+# ============================================================================
+# INJURY TAG MANAGEMENT (Cohort W)
+# ============================================================================
+
+@router.get("/injury-tags")
+async def get_injury_tags(admin_data: dict = Depends(require_admin)) -> Dict:
+    """
+    Get all injury tags with their rule metadata.
+    
+    **SaaS Admin Use Case:**
+    - View all 17 InjuryTag enum values
+    - See rule counts and classification stats per tag
+    - Monitor tag usage across contributions
+    """
+    try:
+        from app.services.injury_classifier import InjuryTag
+        from app.services.injury_classifier.rules import TAG_RULES
+        
+        tags = []
+        for tag in InjuryTag:
+            rule = TAG_RULES.get(tag)
+            tags.append({
+                "value": tag.value,
+                "name": tag.name,
+                "pattern_count": len(rule.patterns) if rule else 0,
+                "confidence": rule.confidence if rule else None,
+                "co_occurrence_required": list(rule.co_occurrence_required) if rule else [],
+                "co_occurrence_forbidden": list(rule.co_occurrence_forbidden) if rule else [],
+            })
+        
+        return {"tags": tags, "total": len(tags)}
+    except Exception as e:
+        logger.error(f"Error fetching injury tags: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error", "error": str(e)})
+
+
+@router.get("/injury-tags/usage-stats")
+async def get_injury_tag_usage_stats(admin_data: dict = Depends(require_admin)) -> Dict:
+    """
+    Get usage statistics for each injury tag across contributions.
+    
+    **SaaS Admin Use Case:**
+    - See which tags are most/least common
+    - Identify tags that need more training data
+    - Monitor classification quality
+    """
+    try:
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        result = db.table('settle_contributions') \
+            .select('id, injury_category, injury_classification') \
+            .eq('status', 'approved') \
+            .execute()
+        
+        rows = result.data or []
+        tag_counts: Dict[str, int] = {}
+        
+        for row in rows:
+            tags = row.get('injury_category') or []
+            for tag in tags:
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        
+        sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
+        
+        return {
+            "total_approved": len(rows),
+            "tag_counts": [{"tag": t, "count": c} for t, c in sorted_tags],
+            "unique_tags": len(tag_counts)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching tag usage stats: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error", "error": str(e)})
+
+
+# ============================================================================
+# INJURY REVIEW QUEUE MANAGEMENT (Cohort W)
+# ============================================================================
+
+@router.get("/review-queue")
+async def get_review_queue(
+    status: Optional[str] = Query(None, description="Filter by status: pending, accepted, modified, rejected"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    admin_data: dict = Depends(require_admin)
+) -> Dict:
+    """
+    Get items in the injury review queue.
+    
+    **SaaS Admin Use Case:**
+    - Review flagged classifications from the injury classifier
+    - Accept, modify, or reject automated tags
+    - Track review progress
+    """
+    try:
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        query = db.table('injury_review_queue').select('*')
+        if status:
+            query = query.eq('status', status)
+        
+        count_result = db.table('injury_review_queue').select('id', count='exact')
+        if status:
+            count_result = count_result.eq('status', status)
+        count_result = count_result.execute()
+        total = count_result.count if hasattr(count_result, 'count') else 0
+        
+        result = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+        
+        return {
+            "items": result.data if result.data else [],
+            "total": total,
+            "limit": limit,
+            "offset": offset
+        }
+    except Exception as e:
+        logger.error(f"Error fetching review queue: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error", "error": str(e)})
+
+
+@router.post("/review-queue/{queue_id}/review")
+async def submit_review(
+    queue_id: UUID,
+    review_data: Dict,
+    admin_data: dict = Depends(require_admin)
+) -> Dict:
+    """
+    Submit a review decision for a queued item.
+    
+    **SaaS Admin Use Case:**
+    - Accept the classifier's tags as-is
+    - Modify tags (provide corrected tags)
+    - Reject the classification as unrecoverable
+    """
+    try:
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        action = review_data.get('action')
+        if action not in ('accept', 'modify', 'reject'):
+            raise HTTPException(status_code=400, detail="Action must be 'accept', 'modify', or 'reject'")
+        
+        updates = {
+            'status': action,
+            'reviewed_by': admin_data.get('user_id', 'admin'),
+            'reviewed_at': datetime.now(UTC).isoformat(),
+            'review_action': action,
+        }
+        
+        if action == 'modify':
+            updates['final_tags'] = review_data.get('final_tags', [])
+        if 'review_notes' in review_data:
+            updates['review_notes'] = review_data['review_notes']
+        
+        result = db.table('injury_review_queue') \
+            .update(updates) \
+            .eq('id', str(queue_id)) \
+            .execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Review queue item not found")
+        
+        return {"status": "reviewed", "queue_id": str(queue_id), "action": action}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error submitting review for {queue_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error", "error": str(e)})
+
+
+# ============================================================================
+# ENHANCED ANALYTICS WITH RICH FIELDS (Cohort W)
+# ============================================================================
+
+@router.get("/analytics/rich-fields")
+async def get_rich_field_analytics(admin_data: dict = Depends(require_admin)) -> Dict:
+    """
+    Get analytics broken down by rich fields.
+    
+    **SaaS Admin Use Case:**
+    - See case distribution by insurance carrier
+    - View injury severity breakdown
+    - Monitor source type mix (firm submissions vs scraped)
+    - Track verdict vs settlement ratio
+    """
+    try:
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        rows = db.table('settle_contributions') \
+            .select('insurance_carrier, injury_severity, source_type, is_verdict, court_level, jurisdiction') \
+            .eq('status', 'approved') \
+            .execute()
+        
+        data = rows.data or []
+        
+        carrier_counts: Dict[str, int] = {}
+        severity_counts: Dict[str, int] = {}
+        source_counts: Dict[str, int] = {}
+        verdict_count = 0
+        settlement_count = 0
+        court_level_counts: Dict[str, int] = {}
+        jurisdiction_states: Dict[str, int] = {}
+        
+        for row in data:
+            carrier = row.get('insurance_carrier')
+            if carrier:
+                carrier_counts[carrier] = carrier_counts.get(carrier, 0) + 1
+            
+            severity = row.get('injury_severity')
+            if severity:
+                severity_counts[severity] = severity_counts.get(severity, 0) + 1
+            
+            source = row.get('source_type')
+            if source:
+                source_counts[source] = source_counts.get(source, 0) + 1
+            
+            is_verdict = row.get('is_verdict')
+            if is_verdict:
+                verdict_count += 1
+            elif is_verdict is False:
+                settlement_count += 1
+            
+            court_level = row.get('court_level')
+            if court_level:
+                court_level_counts[court_level] = court_level_counts.get(court_level, 0) + 1
+            
+            jurisdiction = row.get('jurisdiction', '')
+            if ',' in jurisdiction:
+                state = jurisdiction.rsplit(',', 1)[1].strip()
+                jurisdiction_states[state] = jurisdiction_states.get(state, 0) + 1
+        
+        return {
+            "total_approved": len(data),
+            "insurance_carriers": sorted([{"carrier": k, "count": v} for k, v in carrier_counts.items()], key=lambda x: x["count"], reverse=True),
+            "injury_severity": sorted([{"severity": k, "count": v} for k, v in severity_counts.items()], key=lambda x: x["count"], reverse=True),
+            "source_types": sorted([{"source": k, "count": v} for k, v in source_counts.items()], key=lambda x: x["count"], reverse=True),
+            "verdict_vs_settlement": {
+                "verdicts": verdict_count,
+                "settlements": settlement_count,
+                "unspecified": len(data) - verdict_count - settlement_count
+            },
+            "court_levels": sorted([{"level": k, "count": v} for k, v in court_level_counts.items()], key=lambda x: x["count"], reverse=True),
+            "states": sorted([{"state": k, "count": v} for k, v in jurisdiction_states.items()], key=lambda x: x["count"], reverse=True),
+        }
+    except Exception as e:
+        logger.error(f"Error fetching rich field analytics: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error", "error": str(e)})
+
+
+# ============================================================================
+# PROVENANCE VIEWER (Audit-Only — service_role required)
+# ============================================================================
+
+@router.get("/provenance/{contribution_id}")
+async def get_case_provenance(
+    contribution_id: UUID,
+    admin_data: dict = Depends(require_admin)
+) -> Dict:
+    """
+    Get case provenance data for a contribution (audit-only).
+    
+    **SaaS Admin Use Case:**
+    - View identifying fields stripped from public contributions
+    - Verify source URLs, case citations, docket numbers
+    - Access audit trail for compliance reviews
+    
+    **Security:** This endpoint accesses the private settle_case_provenance table.
+    Only service_role can query this table directly.
+    """
+    try:
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        result = db.table('settle_case_provenance') \
+            .select('*') \
+            .eq('contribution_id', str(contribution_id)) \
+            .execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Provenance not found")
+        
+        provenance = result.data[0]
+        
+        # Log the access for audit trail
+        db.table('settle_case_provenance') \
+            .update({
+                'last_audit_access': datetime.now(UTC).isoformat(),
+                'last_audit_accessor': admin_data.get('user_id', 'admin')
+            }) \
+            .eq('contribution_id', str(contribution_id)) \
+            .execute()
+        
+        return provenance
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching provenance for {contribution_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error", "error": str(e)})
+

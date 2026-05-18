@@ -376,6 +376,17 @@ class SettlementEstimator:
         )
         if request.injury_category:
             query = query.cs("injury_category", request.injury_category)
+        
+        # Rich field filters (Cohort W)
+        if request.insurance_carrier:
+            query = query.eq("insurance_carrier", request.insurance_carrier)
+        if request.injury_severity:
+            query = query.eq("injury_severity", request.injury_severity)
+        if request.court_level:
+            query = query.eq("court_level", request.court_level)
+        if request.is_verdict is not None:
+            query = query.eq("is_verdict", request.is_verdict)
+        
         return query
 
     def _query_county_tier(self, request: EstimateRequest) -> List[dict]:
@@ -431,13 +442,16 @@ class SettlementEstimator:
         medical_bills: float
     ) -> Tuple[Dict[str, float], str]:
         """
-        Calculate settlement ranges using percentile method.
+        Calculate settlement ranges using reputation-weighted percentile method.
         
         Algorithm:
-        1. Extract outcome amounts from bucketed ranges (use midpoint)
-        2. Calculate percentiles: 25th, 50th (median), 75th, 95th
-        3. Adjust for medical bills (if significantly different)
-        4. Determine confidence level based on case count
+        1. Extract outcome amounts — prefer exact_outcome_amount when available,
+           fall back to bucket midpoint from outcome_amount_range
+        2. Filter out low-reputation cases (score < 0.2) from percentile calc
+        3. Calculate weighted percentiles using reputation * source_quality
+        4. Adjust for medical bills (if significantly different)
+        5. Widen confidence bands if high proportion of low-rep submissions
+        6. Determine confidence level based on case count and data quality
         
         Args:
             cases: List of comparable cases
@@ -446,36 +460,72 @@ class SettlementEstimator:
         Returns:
             Tuple of (ranges dict, confidence level)
         """
-        # Step 1: Extract settlement amounts (convert buckets to midpoints)
-        amounts = [self._bucket_to_midpoint(case.outcome_amount_range) for case in cases]
-        amounts = np.array(amounts)
+        # Step 1: Extract amounts and weights
+        amounts = []
+        weights = []
+        low_rep_count = 0
         
-        # Step 2: Calculate percentiles
-        p25 = float(np.percentile(amounts, 25))
-        median = float(np.percentile(amounts, 50))
-        p75 = float(np.percentile(amounts, 75))
-        p95 = float(np.percentile(amounts, 95))
+        for case in cases:
+            # Extract amount
+            if case.exact_outcome_amount is not None and case.exact_outcome_amount > 0:
+                amount = case.exact_outcome_amount
+            else:
+                amount = self._bucket_to_midpoint(case.outcome_amount_range)
+            
+            # Calculate weight from reputation and source type
+            rep_score = getattr(case, 'contributor_reputation_score', None) or 0.5
+            source_type = getattr(case, 'source_type', None)
+            weight = self._calc_submission_weight(rep_score, source_type)
+            
+            if weight == 0.0:
+                low_rep_count += 1
+                continue  # exclude from percentile calculation
+            
+            amounts.append(amount)
+            weights.append(weight)
+        
+        if not amounts:
+            # All cases were low-reputation; fall back to unweighted
+            amounts = [
+                case.exact_outcome_amount if case.exact_outcome_amount else self._bucket_to_midpoint(case.outcome_amount_range)
+                for case in cases
+            ]
+            weights = [1.0] * len(amounts)
+        
+        amounts = np.array(amounts)
+        weights = np.array(weights)
+        
+        # Step 2: Calculate weighted percentiles
+        p25 = float(self._weighted_percentile(amounts, weights, 25))
+        median = float(self._weighted_percentile(amounts, weights, 50))
+        p75 = float(self._weighted_percentile(amounts, weights, 75))
+        p95 = float(self._weighted_percentile(amounts, weights, 95))
         
         # Step 3: Adjust for medical bills (if needed)
-        # If current case's medical bills are significantly different from average,
-        # apply proportional adjustment
         avg_medical_bills = np.mean([case.medical_bills for case in cases])
         if avg_medical_bills > 0:
             adjustment_ratio = medical_bills / avg_medical_bills
-            # Only adjust if ratio is significantly different (< 0.5 or > 2.0)
             if adjustment_ratio < 0.5 or adjustment_ratio > 2.0:
-                # Apply partial adjustment (50% weight)
                 adjustment_factor = 1.0 + (adjustment_ratio - 1.0) * 0.5
                 p25 *= adjustment_factor
                 median *= adjustment_factor
                 p75 *= adjustment_factor
                 p95 *= adjustment_factor
         
-        # Step 4: Determine confidence
-        n_cases = len(cases)
-        if n_cases >= self.CONFIDENCE_THRESHOLDS["high"]:
-            confidence = "high"
-        else:
+        # Step 4: Confidence band widening for low-rep datasets
+        total_cases = len(cases)
+        low_rep_ratio = low_rep_count / total_cases if total_cases > 0 else 0
+        
+        confidence = "high"
+        if low_rep_ratio > 0.3:
+            # Widen bands by 15%
+            p25 *= 0.85
+            p95 *= 1.15
+            confidence = "medium"
+        
+        # Step 5: Determine confidence based on case count
+        n_effective = len(amounts)
+        if n_effective < self.CONFIDENCE_THRESHOLDS["high"] and confidence == "high":
             confidence = "medium"
         
         ranges = {
@@ -485,7 +535,11 @@ class SettlementEstimator:
             "p95": round(p95, 2)
         }
         
-        logger.info(f"Calculated percentile ranges: {ranges} (n={n_cases}, confidence={confidence})")
+        logger.info(
+            f"Calculated weighted percentile ranges: {ranges} "
+            f"(n={n_effective}, low_rep_excluded={low_rep_count}, "
+            f"confidence={confidence})"
+        )
         
         return ranges, confidence
     
@@ -515,6 +569,65 @@ class SettlementEstimator:
         }
         
         return bucket_midpoints.get(bucket, 100000)  # Default to $100k
+    
+    @staticmethod
+    def _weighted_percentile(
+        data: np.ndarray,
+        weights: np.ndarray,
+        percentile: float,
+    ) -> float:
+        """
+        Calculate weighted percentile using the cumulative weight method.
+        
+        Args:
+            data: Array of values
+            weights: Array of weights (same length as data)
+            percentile: Percentile to calculate (0-100)
+            
+        Returns:
+            Weighted percentile value
+        """
+        if len(data) == 0:
+            return 0.0
+        
+        sorter = np.argsort(data)
+        sorted_data = data[sorter]
+        sorted_weights = weights[sorter]
+        
+        cumulative_weights = np.cumsum(sorted_weights)
+        total_weight = cumulative_weights[-1]
+        
+        if total_weight == 0:
+            return float(sorted_data[0])
+        
+        target = (percentile / 100.0) * total_weight
+        
+        # Find the index where cumulative weight exceeds target
+        idx = np.searchsorted(cumulative_weights, target, side='right')
+        idx = min(idx, len(sorted_data) - 1)
+        
+        return float(sorted_data[idx])
+    
+    @staticmethod
+    def _calc_submission_weight(reputation_score: float, source_type: Optional[str]) -> float:
+        """
+        Calculate submission weight from reputation score and source type.
+        
+        Returns 0.0 for low-reputation submissions (< 0.2).
+        """
+        if reputation_score < 0.2:
+            return 0.0
+        
+        source_factors = {
+            "firm_submission": 1.0,
+            "scraped_verdict": 0.8,
+            "news_report": 0.6,
+            "court_docket": 0.7,
+            "settlement_survey": 0.9,
+        }
+        
+        source_factor = source_factors.get(source_type, 0.8)
+        return reputation_score * source_factor
     
     def _select_representative_cases(
         self,
@@ -563,7 +676,14 @@ class SettlementEstimator:
                 medical_bills=case.medical_bills,
                 outcome_range=case.outcome_amount_range,
                 outcome_type=case.outcome_type,
-                contributed_at=case.contributed_at
+                contributed_at=case.contributed_at,
+                insurance_carrier=case.insurance_carrier,
+                injury_severity=case.injury_severity,
+                court_level=case.court_level,
+                is_verdict=case.is_verdict,
+                exact_outcome_amount=case.exact_outcome_amount,
+                comparative_negligence_pct=case.comparative_negligence_pct,
+                date_of_verdict=case.date_of_verdict,
             )
             for case in selected
         ]

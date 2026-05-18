@@ -337,9 +337,9 @@ class IntelligenceGate:
                 query = query.eq("case_type", case_type)
             if carrier:
                 try:
-                    query = query.eq("carrier_id", carrier)
+                    query = query.eq("insurance_carrier", carrier)
                 except Exception:
-                    logger.debug("carrier filter skipped (column absent).")
+                    logger.debug("insurance_carrier filter skipped (column absent).")
             if filter_kind == "county_exact":
                 query = query.eq("jurisdiction", filter_value)
             elif filter_kind == "state_suffix":
@@ -412,9 +412,9 @@ class IntelligenceGate:
                     query = query.eq("case_type", case_type)
                 if carrier:
                     try:
-                        query = query.eq("carrier_id", carrier)
+                        query = query.eq("insurance_carrier", carrier)
                     except Exception:
-                        logger.debug("carrier filter skipped (column absent).")
+                        logger.debug("insurance_carrier filter skipped (column absent).")
                 if filter_kind == "state_suffix":
                     query = query.ilike("jurisdiction", f"%, {filter_value}")
                 elif filter_kind == "state_sentinel":

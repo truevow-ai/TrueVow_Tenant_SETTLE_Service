@@ -68,6 +68,31 @@ class SettleContribution(BaseModel):
     # pilot response's comparable_cases list.
     case_narrative: Optional[str] = None
 
+    # ========================================================================
+    # Rich Fields (Cohort W — 2026-05-17)
+    # Tier 1 — High impact on estimate quality
+    # ========================================================================
+    insurance_carrier: Optional[str] = Field(None, description="Insurance carrier name")
+    comparative_negligence_pct: Optional[float] = Field(None, ge=0, le=100, description="Plaintiff comparative negligence percentage")
+    exact_outcome_amount: Optional[float] = Field(None, ge=0, description="Exact settlement/verdict amount in dollars")
+    is_verdict: Optional[bool] = Field(None, description="True if jury verdict, False if settlement")
+    date_of_verdict: Optional[datetime] = Field(None, description="Date of verdict or settlement")
+
+    # ========================================================================
+    # Tier 2 — Useful for filtering/display
+    # ========================================================================
+    court_level: Optional[str] = Field(None, description="circuit, federal_district, federal_appellate, state_appellate, arbitration, mediation")
+    injury_severity: Optional[str] = Field(None, description="soft_tissue, fracture, surgical, catastrophic, fatal")
+    policy_limit_amount: Optional[float] = Field(None, ge=0, description="Policy limit amount in dollars")
+    source_type: Optional[str] = Field(None, description="firm_submission, scraped_verdict, news_report, court_docket, settlement_survey")
+
+    # ========================================================================
+    # Tier 3 — Nice-to-have
+    # ========================================================================
+    trial_duration_days: Optional[int] = Field(None, ge=0, description="Trial duration in days")
+    appeal_filed: Optional[bool] = Field(None, description="Whether an appeal was filed")
+    appeal_outcome: Optional[str] = Field(None, description="affirmed, reversed, remanded, settled, dismissed, pending")
+
 
 # ============================================================================
 # API REQUEST/RESPONSE MODELS
@@ -89,6 +114,12 @@ class EstimateRequest(BaseModel):
     lost_wages: Optional[float] = Field(None, ge=0, description="Lost wages amount")
     policy_limits: Optional[str] = Field(None, description="Policy limits")
     defendant_category: Optional[str] = Field(None, description="Defendant category")
+    
+    # Rich field filters (Cohort W)
+    insurance_carrier: Optional[str] = Field(None, description="Filter by insurance carrier")
+    injury_severity: Optional[str] = Field(None, description="Filter by injury severity")
+    court_level: Optional[str] = Field(None, description="Filter by court level")
+    is_verdict: Optional[bool] = Field(None, description="Filter by verdict vs settlement")
     
     @field_validator('jurisdiction')
     @classmethod
@@ -112,6 +143,15 @@ class ComparableCase(BaseModel):
     outcome_range: str
     outcome_type: str
     contributed_at: datetime
+    
+    # Rich fields (Cohort W)
+    insurance_carrier: Optional[str] = None
+    injury_severity: Optional[str] = None
+    court_level: Optional[str] = None
+    is_verdict: Optional[bool] = None
+    exact_outcome_amount: Optional[float] = None
+    comparative_negligence_pct: Optional[float] = None
+    date_of_verdict: Optional[datetime] = None
 
 
 class EstimateResponse(BaseModel):
