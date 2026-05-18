@@ -155,12 +155,14 @@ async def approve_contribution(
     - Admin reviews contribution and approves it
     - Contribution status changes from 'pending' to 'approved'
     - Contribution becomes available for queries
+    - Contributor reputation is updated
     
     **Workflow:**
     1. Verify contribution is valid (no PII, correct format)
     2. Update status to 'approved'
     3. Log approval action in audit trail
-    4. If Founding Member: Update their contribution count
+    4. Update contributor reputation score
+    5. If Founding Member: Update their contribution count
     """
     try:
         logger.info(f"Admin {admin_data['user_id']} approving contribution {contribution_id}")
@@ -171,21 +173,30 @@ async def approve_contribution(
         if not db:
             raise HTTPException(status_code=503, detail="Database unavailable")
         
-        # Update contribution status
-        result = db.table('settle_contributions') \
-            .update({
-                'status': 'approved',
-                'approved_at': datetime.now(UTC).isoformat(),
-                'approved_by': admin_data['user_id']
-            }) \
+        # Get contributor_user_id before updating
+        existing = db.table('settle_contributions') \
+            .select('contributor_user_id') \
             .eq('id', str(contribution_id)) \
             .execute()
         
-        if not result.data or len(result.data) == 0:
+        if not existing.data or len(existing.data) == 0:
             raise HTTPException(
                 status_code=404,
                 detail={"message": "Contribution not found", "contribution_id": str(contribution_id)}
             )
+        
+        contributor_user_id = existing.data[0].get('contributor_user_id')
+        
+        # Use ContributionService to approve (wires in reputation update)
+        service = ContributionService(db_connection=db)
+        success, error = await service.approve_contribution(
+            contribution_id=contribution_id,
+            approved_by=admin_data['user_id'],
+            contributor_user_id=UUID(contributor_user_id) if contributor_user_id else None,
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail=error)
         
         logger.info(f"Contribution {contribution_id} approved by admin {admin_data['user_id']}")
         
@@ -218,6 +229,7 @@ async def reject_contribution(
     - Admin detects PII in contribution
     - Admin flags invalid data or outliers
     - Contribution status changes to 'rejected'
+    - Contributor reputation is updated
     - Attorney is notified (via SaaS Admin)
     
     **Common Rejection Reasons:**
@@ -235,22 +247,31 @@ async def reject_contribution(
         if not db:
             raise HTTPException(status_code=503, detail="Database unavailable")
         
-        # Update contribution status
-        result = db.table('settle_contributions') \
-            .update({
-                'status': 'rejected',
-                'rejected_at': datetime.now(UTC).isoformat(),
-                'rejected_by': admin_data['user_id'],
-                'rejection_reason': reason
-            }) \
+        # Get contributor_user_id before updating
+        existing = db.table('settle_contributions') \
+            .select('contributor_user_id') \
             .eq('id', str(contribution_id)) \
             .execute()
         
-        if not result.data or len(result.data) == 0:
+        if not existing.data or len(existing.data) == 0:
             raise HTTPException(
                 status_code=404,
                 detail={"message": "Contribution not found", "contribution_id": str(contribution_id)}
             )
+        
+        contributor_user_id = existing.data[0].get('contributor_user_id')
+        
+        # Use ContributionService to reject (wires in reputation update)
+        service = ContributionService(db_connection=db)
+        success, error = await service.reject_contribution(
+            contribution_id=contribution_id,
+            rejection_reason=reason,
+            rejected_by=admin_data['user_id'],
+            contributor_user_id=UUID(contributor_user_id) if contributor_user_id else None,
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail=error)
         
         logger.warning(f"Contribution {contribution_id} rejected by admin {admin_data['user_id']}: {reason}")
         
@@ -373,7 +394,7 @@ async def update_founding_member_status(
         return {
             "member_id": str(member_id),
             "status": status,
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
             "reason": reason
         }
     except Exception as e:
@@ -404,7 +425,7 @@ async def get_founding_member_contributions(
     try:
         # TODO: Implement actual database query
         return {
-            "month": month or datetime.utcnow().strftime("%Y-%m"),
+            "month": month or datetime.now(UTC).strftime("%Y-%m"),
             "members": [],
             "compliant_count": 0,
             "needs_reminder_count": 0,
@@ -453,7 +474,7 @@ async def create_api_key_for_tenant(
             "api_key": "sk_live_...",  # TODO: Generate actual key
             "key_id": str(UUID()),
             "access_level": access_level,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(UTC).isoformat()
         }
     except Exception as e:
         logger.error(f"Error creating API key for tenant {tenant_id}: {str(e)}", exc_info=True)
@@ -509,7 +530,7 @@ async def rotate_api_key(
         return {
             "key_id": str(key_id),
             "new_api_key": "sk_live_...",  # TODO: Generate actual key
-            "rotated_at": datetime.utcnow().isoformat()
+            "rotated_at": datetime.now(UTC).isoformat()
         }
     except Exception as e:
         logger.error(f"Error rotating API key {key_id}: {str(e)}", exc_info=True)
@@ -539,7 +560,7 @@ async def revoke_api_key(
         return {
             "key_id": str(key_id),
             "status": "revoked",
-            "revoked_at": datetime.utcnow().isoformat()
+            "revoked_at": datetime.now(UTC).isoformat()
         }
     except Exception as e:
         logger.error(f"Error revoking API key {key_id}: {str(e)}", exc_info=True)
@@ -627,8 +648,8 @@ async def get_usage_analytics(
         # TODO: Implement actual analytics query
         return {
             "period": {
-                "start": start_date or (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d"),
-                "end": end_date or datetime.utcnow().strftime("%Y-%m-%d")
+                "start": start_date or (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%d"),
+                "end": end_date or datetime.now(UTC).strftime("%Y-%m-%d")
             },
             "total_reports": 0,
             "total_api_calls": 0,
@@ -696,7 +717,7 @@ async def get_compliance_analytics(
             "anonymization_verified": 0,
             "blockchain_hashes_generated": 0,
             "compliance_violations": 0,
-            "last_audit": datetime.utcnow().isoformat()
+            "last_audit": datetime.now(UTC).isoformat()
         }
     except Exception as e:
         logger.error(f"Error fetching compliance analytics: {str(e)}", exc_info=True)

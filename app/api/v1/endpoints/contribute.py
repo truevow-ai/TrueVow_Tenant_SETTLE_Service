@@ -4,10 +4,13 @@ Contribution Endpoints - Submit Settlement Data
 
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
+from uuid import UUID
 import logging
 
 from app.models.case_bank import ContributionRequest, ContributionResponse
 from app.services.contributor import ContributionService
+from app.core.database import get_db
+from app.core.auth import require_any_auth
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -16,20 +19,21 @@ logger = logging.getLogger(__name__)
 @router.post("/submit", response_model=ContributionResponse)
 async def submit_contribution(
     request: ContributionRequest,
-    # api_key: str = Depends(get_api_key),  # TODO: Implement auth
-    # api_key_id: UUID = Depends(get_api_key_id),
-    # is_founding_member: bool = Depends(check_founding_member)
+    api_key_data: dict = Depends(require_any_auth),
 ):
     """
     Submit anonymous settlement data contribution.
     
+    **Authentication:** Requires valid API key (any access level).
+    
     **Workflow:**
     1. Validate data (completeness, correctness)
     2. Check anonymization (NO PHI/PII allowed)
-    3. Generate blockchain hash (OpenTimestamps)
-    4. Store in database (status='pending' for manual review)
-    5. Track Founding Member stats (if applicable)
-    6. Return confirmation with blockchain receipt
+    3. Run anomaly detection (statistical checks)
+    4. Generate blockchain hash (OpenTimestamps)
+    5. Store in database (status='pending' or 'flagged' based on anomaly)
+    6. Track Founding Member stats (if applicable)
+    7. Return confirmation with blockchain receipt
     
     **Compliance Requirements:**
     - ❌ NO client names, SSNs, DOBs, medical record numbers
@@ -43,19 +47,22 @@ async def submit_contribution(
     - Founding Member stats (if applicable)
     """
     try:
-        # TODO: Get actual API key info from auth middleware
-        api_key_id = None
-        is_founding_member = False
+        # Extract authenticated user info
+        api_key_id = api_key_data.get("api_key_id")
+        user_id = api_key_data.get("user_id")
+        access_level = api_key_data.get("access_level", "")
+        is_founding_member = access_level in ("founding_member", "admin")
         
-        # Initialize contribution service
-        # TODO: Pass actual database connection
-        contributor = ContributionService(db_connection=None)
+        # Initialize contribution service with DB connection
+        db = await get_db()
+        contributor = ContributionService(db_connection=db)
         
         # Submit contribution
         success, response, error_msg = await contributor.submit_contribution(
             request=request,
-            api_key_id=api_key_id,
-            is_founding_member=is_founding_member
+            api_key_id=UUID(api_key_id) if api_key_id else None,
+            contributor_user_id=UUID(user_id) if user_id else None,
+            is_founding_member=is_founding_member,
         )
         
         if not success:
@@ -67,6 +74,7 @@ async def submit_contribution(
         
         logger.info(
             f"Contribution {response.contribution_id} submitted successfully. "
+            f"Status: {response.status}, "
             f"Blockchain hash: {response.blockchain_hash}"
         )
         
@@ -89,15 +97,46 @@ async def get_contribution_stats():
     
     Public endpoint showing database size and growth.
     """
-    # TODO: Implement actual database query
-    return {
-        "total_contributions": 10234,  # Mock data
-        "approved_contributions": 9876,
-        "pending_review": 358,
-        "founding_member_contributions": 5432,
-        "jurisdictions_covered": 342,
-        "last_updated": "2025-12-07T12:00:00Z"
-    }
+    try:
+        db = await get_db()
+        if not db:
+            return {
+                "total_contributions": 0,
+                "approved_contributions": 0,
+                "pending_review": 0,
+                "founding_member_contributions": 0,
+                "jurisdictions_covered": 0,
+                "last_updated": None,
+            }
+        
+        # Count by status
+        total = db.table("settle_contributions").select("id", count="exact").execute()
+        approved = db.table("settle_contributions").select("id", count="exact").eq("status", "approved").execute()
+        pending = db.table("settle_contributions").select("id", count="exact").eq("status", "pending").execute()
+        founding = db.table("settle_contributions").select("id", count="exact").eq("founding_member", True).execute()
+        
+        # Count distinct jurisdictions
+        jurisdictions = db.table("settle_contributions").select("jurisdiction").eq("status", "approved").execute()
+        unique_jurisdictions = len(set(row.get("jurisdiction", "") for row in (jurisdictions.data or [])))
+        
+        return {
+            "total_contributions": total.count or 0,
+            "approved_contributions": approved.count or 0,
+            "pending_review": pending.count or 0,
+            "founding_member_contributions": founding.count or 0,
+            "jurisdictions_covered": unique_jurisdictions,
+            "last_updated": None,
+        }
+    except Exception as e:
+        logger.error(f"Error fetching contribution stats: {str(e)}", exc_info=True)
+        return {
+            "total_contributions": 0,
+            "approved_contributions": 0,
+            "pending_review": 0,
+            "founding_member_contributions": 0,
+            "jurisdictions_covered": 0,
+            "last_updated": None,
+        }
 
 
 @router.get("/health")
@@ -108,4 +147,3 @@ async def contribute_service_health():
         "status": "operational",
         "endpoints": ["/submit", "/stats"]
     }
-

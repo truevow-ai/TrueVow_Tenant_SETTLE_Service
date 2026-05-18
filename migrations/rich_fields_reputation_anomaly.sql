@@ -120,8 +120,10 @@ COMMENT ON TABLE settle_anomaly_flags IS 'Anomaly detection flags for individual
 ALTER TABLE settle_contributions ADD COLUMN contributor_reputation_score NUMERIC DEFAULT 0.0;
 ALTER TABLE settle_contributions ADD COLUMN anomaly_flags JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE settle_contributions ADD COLUMN submission_quality_weight NUMERIC DEFAULT 1.0;
+ALTER TABLE settle_contributions ADD COLUMN contributor_user_id UUID;
 
 CREATE INDEX idx_settle_contributions_reputation ON settle_contributions (contributor_reputation_score);
+CREATE INDEX idx_settle_contributions_contributor_user_id ON settle_contributions (contributor_user_id);
 
 -- ============================================================================
 -- Update alembic_version to the latest migration
@@ -134,6 +136,6 @@ CREATE TABLE IF NOT EXISTS alembic_version (
 
 -- Update to latest revision
 DELETE FROM alembic_version;
-INSERT INTO alembic_version (version_num) VALUES ('b2c3d4e5f6a7');
+INSERT INTO alembic_version (version_num) VALUES ('c3d4e5f6a7b8');
 
 COMMIT;

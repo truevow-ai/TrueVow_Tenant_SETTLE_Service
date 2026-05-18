@@ -6,13 +6,13 @@ Public and admin endpoints for SETTLE waitlist management.
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, List, Dict
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, UTC
 import logging
 
 from app.core.database import get_db
-from app.core.auth import APIKeyAuth
+from app.core.auth import require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +69,16 @@ async def join_waitlist(request: WaitlistJoinRequest, db = Depends(get_db)):
     """
     
     try:
-        # Check if email already exists
-        existing = await db.fetch_one(
-            "SELECT id FROM settle_waitlist WHERE email = $1",
-            request.email
-        )
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
         
-        if existing:
+        # Check if email already exists
+        existing = db.table("settle_waitlist") \
+            .select("id") \
+            .eq("email", request.email) \
+            .execute()
+        
+        if existing.data and len(existing.data) > 0:
             raise HTTPException(
                 status_code=400,
                 detail="This email is already on the waitlist"
@@ -84,31 +87,32 @@ async def join_waitlist(request: WaitlistJoinRequest, db = Depends(get_db)):
         # Generate waitlist ID
         waitlist_id = str(uuid4())
         
-        # Insert into database (using joined_at as created_at)
-        await db.execute(
-            """
-            INSERT INTO settle_waitlist (
-                id, firm_name, contact_name, email, phone, 
-                practice_areas, jurisdiction, referral_source,
-                status, joined_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            """,
-            waitlist_id,
-            request.firm_name,
-            request.contact_name,
-            request.email,
-            request.phone,
-            request.practice_areas,
-            request.jurisdiction,
-            request.referral_source,
-            "pending",
-            datetime.utcnow()
-        )
+        # Insert into database
+        insert_data = {
+            "id": waitlist_id,
+            "firm_name": request.firm_name,
+            "contact_name": request.contact_name,
+            "email": request.email,
+            "phone": request.phone,
+            "practice_areas": request.practice_areas,
+            "jurisdiction": request.jurisdiction,
+            "referral_source": request.referral_source,
+            "status": "pending",
+            "joined_at": datetime.now(UTC).isoformat(),
+        }
+        
+        result = db.table("settle_waitlist").insert(insert_data).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to join waitlist")
         
         # Calculate position in queue
-        position = await db.fetch_val(
-            "SELECT COUNT(*) FROM settle_waitlist WHERE status = 'pending'"
-        )
+        pending = db.table("settle_waitlist") \
+            .select("id", count="exact") \
+            .eq("status", "pending") \
+            .execute()
+        
+        position = pending.count if hasattr(pending, "count") and pending.count else 0
         
         logger.info(f"Waitlist join: {request.email} from {request.firm_name} (ID: {waitlist_id})")
         
@@ -126,7 +130,7 @@ async def join_waitlist(request: WaitlistJoinRequest, db = Depends(get_db)):
 
 
 # Admin Endpoints (Auth Required)
-@router.get("/entries", response_model=List[WaitlistEntry], dependencies=[Depends(APIKeyAuth)])
+@router.get("/entries", response_model=List[WaitlistEntry], dependencies=[Depends(require_admin)])
 async def list_waitlist_entries(
     status: Optional[str] = None,
     limit: int = 50,
@@ -140,21 +144,22 @@ async def list_waitlist_entries(
     """
     
     try:
-        query = """
-            SELECT 
-                id, firm_name, contact_name, email, phone,
-                practice_areas, jurisdiction, status,
-                joined_at as created_at, reviewed_at, reviewed_by
-            FROM settle_waitlist
-        """
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        query = db.table("settle_waitlist").select(
+            "id, firm_name, contact_name, email, phone, "
+            "practice_areas, jurisdiction, status, "
+            "joined_at, reviewed_at, reviewed_by"
+        )
         
         if status:
-            query += f" WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
-            rows = await db.fetch_all(query, status, limit, offset)
-        else:
-            query += " ORDER BY created_at DESC LIMIT $1 OFFSET $2"
-            rows = await db.fetch_all(query, limit, offset)
+            query = query.eq("status", status)
         
+        query = query.order("joined_at", desc=True).range(offset, offset + limit - 1)
+        result = query.execute()
+        
+        rows = result.data or []
         entries = []
         for row in rows:
             entries.append(WaitlistEntry(
@@ -162,56 +167,58 @@ async def list_waitlist_entries(
                 firm_name=row['firm_name'],
                 contact_name=row['contact_name'],
                 email=row['email'],
-                phone=row['phone'],
-                practice_areas=row['practice_areas'],
-                jurisdiction=row['jurisdiction'],
+                phone=row.get('phone'),
+                practice_areas=row.get('practice_areas', []),
+                jurisdiction=row.get('jurisdiction'),
                 status=row['status'],
-                created_at=row['created_at'].isoformat(),
-                reviewed_at=row['reviewed_at'].isoformat() if row['reviewed_at'] else None,
-                reviewed_by=row['reviewed_by']
+                created_at=row['joined_at'] if isinstance(row['joined_at'], str) else row['joined_at'].isoformat(),
+                reviewed_at=row.get('reviewed_at'),
+                reviewed_by=row.get('reviewed_by'),
             ))
         
         return entries
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error listing waitlist: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to list waitlist: {str(e)}")
 
 
-@router.get("/entries/{entry_id}", response_model=WaitlistEntry, dependencies=[Depends(APIKeyAuth)])
+@router.get("/entries/{entry_id}", response_model=WaitlistEntry, dependencies=[Depends(require_admin)])
 async def get_waitlist_entry(entry_id: str, db = Depends(get_db)):
     """
     Get waitlist entry details (Admin only).
     """
     
     try:
-        row = await db.fetch_one(
-            """
-            SELECT 
-                id, firm_name, contact_name, email, phone,
-                practice_areas, jurisdiction, status,
-                joined_at as created_at, reviewed_at, reviewed_by
-            FROM settle_waitlist
-            WHERE id = $1
-            """,
-            entry_id
-        )
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
         
-        if not row:
+        result = db.table("settle_waitlist") \
+            .select("id, firm_name, contact_name, email, phone, "
+                    "practice_areas, jurisdiction, status, "
+                    "joined_at, reviewed_at, reviewed_by") \
+            .eq("id", entry_id) \
+            .execute()
+        
+        if not result.data or len(result.data) == 0:
             raise HTTPException(status_code=404, detail="Waitlist entry not found")
+        
+        row = result.data[0]
         
         return WaitlistEntry(
             id=row['id'],
             firm_name=row['firm_name'],
             contact_name=row['contact_name'],
             email=row['email'],
-            phone=row['phone'],
-            practice_areas=row['practice_areas'],
-            jurisdiction=row['jurisdiction'],
+            phone=row.get('phone'),
+            practice_areas=row.get('practice_areas', []),
+            jurisdiction=row.get('jurisdiction'),
             status=row['status'],
-            created_at=row['created_at'].isoformat(),
-            reviewed_at=row['reviewed_at'].isoformat() if row['reviewed_at'] else None,
-            reviewed_by=row['reviewed_by']
+            created_at=row['joined_at'] if isinstance(row['joined_at'], str) else row['joined_at'].isoformat(),
+            reviewed_at=row.get('reviewed_at'),
+            reviewed_by=row.get('reviewed_by'),
         )
         
     except HTTPException:
@@ -221,11 +228,11 @@ async def get_waitlist_entry(entry_id: str, db = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get waitlist entry: {str(e)}")
 
 
-@router.post("/entries/{entry_id}/approve", dependencies=[Depends(APIKeyAuth)])
+@router.post("/entries/{entry_id}/approve", dependencies=[Depends(require_admin)])
 async def approve_waitlist_entry(
     entry_id: str,
     request: WaitlistApprovalRequest,
-    auth: dict = Depends(APIKeyAuth),
+    auth: dict = Depends(require_admin),
     db = Depends(get_db)
 ):
     """
@@ -239,14 +246,19 @@ async def approve_waitlist_entry(
     """
     
     try:
-        # Get waitlist entry
-        entry = await db.fetch_one(
-            "SELECT * FROM settle_waitlist WHERE id = $1",
-            entry_id
-        )
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
         
-        if not entry:
+        # Get waitlist entry
+        entry_result = db.table("settle_waitlist") \
+            .select("*") \
+            .eq("id", entry_id) \
+            .execute()
+        
+        if not entry_result.data or len(entry_result.data) == 0:
             raise HTTPException(status_code=404, detail="Waitlist entry not found")
+        
+        entry = entry_result.data[0]
         
         if entry['status'] != 'pending':
             raise HTTPException(
@@ -255,40 +267,26 @@ async def approve_waitlist_entry(
             )
         
         # Update waitlist status
-        await db.execute(
-            """
-            UPDATE settle_waitlist
-            SET status = 'approved',
-                reviewed_at = $1,
-                reviewed_by = $2
-            WHERE id = $3
-            """,
-            datetime.utcnow(),
-            auth.get('tenant_id', 'admin'),
-            entry_id
-        )
+        db.table("settle_waitlist").update({
+            "status": "approved",
+            "reviewed_at": datetime.now(UTC).isoformat(),
+            "reviewed_by": auth.get('user_id', 'admin'),
+        }).eq("id", entry_id).execute()
         
         # Create Founding Member record
         member_id = str(uuid4())
         tenant_id = str(uuid4())  # New tenant ID for this firm
         
-        await db.execute(
-            """
-            INSERT INTO settle_founding_members (
-                id, tenant_id, firm_name, contact_email,
-                status, total_contributions, approved_contributions,
-                joined_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            """,
-            member_id,
-            tenant_id,
-            entry['firm_name'],
-            entry['email'],
-            'active',
-            0,
-            0,
-            datetime.utcnow()
-        )
+        db.table("settle_founding_members").insert({
+            "id": member_id,
+            "tenant_id": tenant_id,
+            "firm_name": entry['firm_name'],
+            "contact_email": entry['email'],
+            "status": 'active',
+            "total_contributions": 0,
+            "approved_contributions": 0,
+            "joined_at": datetime.now(UTC).isoformat(),
+        }).execute()
         
         # Generate API key
         from app.core.security import generate_api_key, hash_api_key
@@ -296,19 +294,14 @@ async def approve_waitlist_entry(
         api_key = generate_api_key()
         hashed_key = hash_api_key(api_key)
         
-        await db.execute(
-            """
-            INSERT INTO settle_api_keys (
-                id, tenant_id, key_hash, name, status, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6)
-            """,
-            str(uuid4()),
-            tenant_id,
-            hashed_key,
-            f"API Key for {entry['firm_name']}",
-            'active',
-            datetime.utcnow()
-        )
+        db.table("settle_api_keys").insert({
+            "id": str(uuid4()),
+            "tenant_id": tenant_id,
+            "api_key_hash": hashed_key,
+            "name": f"API Key for {entry['firm_name']}",
+            "status": 'active',
+            "created_at": datetime.now(UTC).isoformat(),
+        }).execute()
         
         logger.info(f"Waitlist entry approved: {entry_id} → Member: {member_id}, Tenant: {tenant_id}")
         
@@ -344,11 +337,11 @@ async def approve_waitlist_entry(
         raise HTTPException(status_code=500, detail=f"Failed to approve entry: {str(e)}")
 
 
-@router.post("/entries/{entry_id}/reject", dependencies=[Depends(APIKeyAuth)])
+@router.post("/entries/{entry_id}/reject", dependencies=[Depends(require_admin)])
 async def reject_waitlist_entry(
     entry_id: str,
     request: WaitlistApprovalRequest,
-    auth: dict = Depends(APIKeyAuth),
+    auth: dict = Depends(require_admin),
     db = Depends(get_db)
 ):
     """
@@ -356,14 +349,19 @@ async def reject_waitlist_entry(
     """
     
     try:
-        # Get waitlist entry
-        entry = await db.fetch_one(
-            "SELECT * FROM settle_waitlist WHERE id = $1",
-            entry_id
-        )
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
         
-        if not entry:
+        # Get waitlist entry
+        entry_result = db.table("settle_waitlist") \
+            .select("*") \
+            .eq("id", entry_id) \
+            .execute()
+        
+        if not entry_result.data or len(entry_result.data) == 0:
             raise HTTPException(status_code=404, detail="Waitlist entry not found")
+        
+        entry = entry_result.data[0]
         
         if entry['status'] != 'pending':
             raise HTTPException(
@@ -372,18 +370,11 @@ async def reject_waitlist_entry(
             )
         
         # Update waitlist status
-        await db.execute(
-            """
-            UPDATE settle_waitlist
-            SET status = 'rejected',
-                reviewed_at = $1,
-                reviewed_by = $2
-            WHERE id = $3
-            """,
-            datetime.utcnow(),
-            auth.get('tenant_id', 'admin'),
-            entry_id
-        )
+        db.table("settle_waitlist").update({
+            "status": "rejected",
+            "reviewed_at": datetime.now(UTC).isoformat(),
+            "reviewed_by": auth.get('user_id', 'admin'),
+        }).eq("id", entry_id).execute()
         
         logger.info(f"Waitlist entry rejected: {entry_id}")
         
@@ -394,7 +385,7 @@ async def reject_waitlist_entry(
             email_sent = await email_service.send_waitlist_rejection(
                 to_email=entry['email'],
                 law_firm_name=entry['firm_name'],
-                reason=request.rejection_reason or "Application did not meet current criteria"
+                reason=request.notes or "Application did not meet current criteria"
             )
             if email_sent:
                 logger.info(f"Rejection email sent to {entry['email']}")
@@ -414,4 +405,3 @@ async def reject_waitlist_entry(
     except Exception as e:
         logger.error(f"Error rejecting waitlist entry: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to reject entry: {str(e)}")
-
