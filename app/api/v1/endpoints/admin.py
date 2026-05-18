@@ -10,7 +10,7 @@ These endpoints are called by the SaaS Admin platform to manage:
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Optional, Dict
-from uuid import UUID
+from uuid import UUID, uuid4
 from datetime import datetime, timedelta, UTC
 import logging
 
@@ -19,6 +19,7 @@ from app.models.api_keys import FoundingMember, APIKeyResponse
 from app.services.contributor import ContributionService
 from app.core.auth import require_admin
 from app.core.database import get_db
+from app.core.security import generate_api_key, hash_api_key
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -307,27 +308,43 @@ async def get_founding_members(
     Get all Founding Members with contribution statistics.
     
     **SaaS Admin Use Case:**
-    - View all 2,100 Founding Members
+    - View all Founding Members
     - Track monthly contributions (1-3/month requirement)
     - Monitor compliance with contribution requirements
     
     **Returns:**
     - List of Founding Members with contribution stats
-    - Total count (should be ≤ 2,100)
+    - Total count
     """
     try:
-        # TODO: Implement actual database query
-        # from app.services.founding_member import FoundingMemberService
-        # service = FoundingMemberService(db_connection=db)
-        # members = await service.get_founding_members(status, limit, offset)
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        query = db.table("settle_founding_members").select("*")
+        if status:
+            query = query.eq("status", status)
+        
+        count_result = db.table("settle_founding_members").select("id", count="exact")
+        if status:
+            count_result = count_result.eq("status", status)
+        count_result = count_result.execute()
+        total = count_result.count if hasattr(count_result, "count") else 0
+        
+        result = query.order("joined_at", desc=True).range(offset, offset + limit - 1).execute()
+        
+        members = result.data or []
         
         return {
-            "members": [],
-            "total": 0,
+            "members": members,
+            "total": total,
             "limit": limit,
             "offset": offset,
-            "max_members": 2100
+            "max_members": 2100,
+            "slots_remaining": 2100 - total,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching founding members: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -350,8 +367,40 @@ async def get_founding_member_details(
     - View member status and enrollment date
     """
     try:
-        # TODO: Implement actual database query
-        raise HTTPException(status_code=501, detail="Not yet implemented")
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        member_result = db.table("settle_founding_members") \
+            .select("*") \
+            .eq("id", str(member_id)) \
+            .execute()
+        
+        if not member_result.data:
+            raise HTTPException(status_code=404, detail="Founding Member not found")
+        
+        member = member_result.data[0]
+        
+        # Get contribution count for this member
+        contrib_result = db.table("settle_contributions") \
+            .select("id", count="exact") \
+            .eq("contributor_user_id", member.get("tenant_id")) \
+            .execute()
+        contrib_count = contrib_result.count if hasattr(contrib_result, "count") else 0
+        
+        # Get recent contributions
+        recent = db.table("settle_contributions") \
+            .select("id, jurisdiction, case_type, status, created_at") \
+            .eq("contributor_user_id", member.get("tenant_id")) \
+            .order("created_at", desc=True) \
+            .limit(10) \
+            .execute()
+        
+        return {
+            **member,
+            "contribution_count": contrib_count,
+            "recent_contributions": recent.data or [],
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -367,8 +416,7 @@ async def update_founding_member_status(
     member_id: UUID,
     status: str = Query(..., description="New status: active, inactive, suspended"),
     reason: Optional[str] = Query(None, description="Reason for status change"),
-    # admin_api_key: str = Depends(get_admin_api_key),  # TODO: Implement
-    # admin_user_id: UUID = Depends(get_admin_user_id)  # TODO: Implement
+    admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
     Update Founding Member status.
@@ -384,10 +432,25 @@ async def update_founding_member_status(
     - `suspended`: Member is suspended for non-compliance
     """
     try:
-        # TODO: Implement actual status update
-        # from app.services.founding_member import FoundingMemberService
-        # service = FoundingMemberService(db_connection=db)
-        # success = await service.update_status(member_id, status, reason, admin_user_id)
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        if status not in ("active", "inactive", "suspended"):
+            raise HTTPException(status_code=400, detail="Invalid status value")
+        
+        result = db.table("settle_founding_members") \
+            .update({
+                "status": status,
+                "updated_at": datetime.now(UTC).isoformat(),
+                "status_change_reason": reason,
+                "status_changed_by": admin_data.get("user_id", "admin"),
+            }) \
+            .eq("id", str(member_id)) \
+            .execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Founding Member not found")
         
         logger.info(f"Founding Member {member_id} status updated to {status}")
         
@@ -395,8 +458,10 @@ async def update_founding_member_status(
             "member_id": str(member_id),
             "status": status,
             "updated_at": datetime.now(UTC).isoformat(),
-            "reason": reason
+            "reason": reason,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error updating founding member {member_id} status: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -423,14 +488,63 @@ async def get_founding_member_contributions(
     - Compliance status (compliant, needs reminder, non-compliant)
     """
     try:
-        # TODO: Implement actual database query
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        target_month = month or datetime.now(UTC).strftime("%Y-%m")
+        month_start = f"{target_month}-01T00:00:00+00:00"
+        next_month = datetime.strptime(target_month, "%Y-%m")
+        if next_month.month == 12:
+            next_month = next_month.replace(year=next_month.year + 1, month=1)
+        else:
+            next_month = next_month.replace(month=next_month.month + 1)
+        month_end = f"{next_month.strftime('%Y-%m')}-01T00:00:00+00:00"
+        
+        # Get all founding members
+        members = db.table("settle_founding_members").select("id, tenant_id, firm_name, contact_email, status").execute()
+        member_rows = members.data or []
+        
+        tracking = []
+        for m in member_rows:
+            contrib_count = db.table("settle_contributions") \
+                .select("id", count="exact") \
+                .eq("contributor_user_id", m.get("tenant_id")) \
+                .eq("status", "approved") \
+                .gte("created_at", month_start) \
+                .lt("created_at", month_end) \
+                .execute()
+            count = contrib_count.count if hasattr(contrib_count, "count") else 0
+            
+            if count >= 1:
+                compliance = "compliant"
+            elif m.get("status") == "active":
+                compliance = "needs_reminder"
+            else:
+                compliance = "non_compliant"
+            
+            tracking.append({
+                "member_id": m["id"],
+                "firm_name": m.get("firm_name"),
+                "contact_email": m.get("contact_email"),
+                "status": m.get("status"),
+                "contributions_this_month": count,
+                "compliance_status": compliance,
+            })
+        
+        compliant = sum(1 for t in tracking if t["compliance_status"] == "compliant")
+        needs_reminder = sum(1 for t in tracking if t["compliance_status"] == "needs_reminder")
+        non_compliant = sum(1 for t in tracking if t["compliance_status"] == "non_compliant")
+        
         return {
-            "month": month or datetime.now(UTC).strftime("%Y-%m"),
-            "members": [],
-            "compliant_count": 0,
-            "needs_reminder_count": 0,
-            "non_compliant_count": 0
+            "month": target_month,
+            "members": tracking,
+            "compliant_count": compliant,
+            "needs_reminder_count": needs_reminder,
+            "non_compliant_count": non_compliant,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching founding member contributions: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -447,6 +561,7 @@ async def get_founding_member_contributions(
 async def create_api_key_for_tenant(
     tenant_id: UUID = Query(..., description="Tenant ID from SaaS Admin"),
     access_level: str = Query("standard", description="Access level: founding_member, standard, premium, external"),
+    name: Optional[str] = Query(None, description="Key name/description"),
     admin_data: dict = Depends(require_admin)
 ) -> Dict:
     """
@@ -462,20 +577,40 @@ async def create_api_key_for_tenant(
     - Key ID for future reference
     """
     try:
-        # TODO: Implement actual API key creation
-        # from app.services.api_keys import APIKeyService
-        # service = APIKeyService(db_connection=db)
-        # api_key, key_id = await service.create_api_key(tenant_id, access_level)
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        if access_level not in ("founding_member", "standard", "premium", "external"):
+            raise HTTPException(status_code=400, detail="Invalid access level")
+        
+        api_key, key_hash = generate_api_key()
+        key_id = str(uuid4())
+        
+        db.table("settle_api_keys").insert({
+            "id": key_id,
+            "tenant_id": str(tenant_id),
+            "api_key_hash": key_hash,
+            "name": name or f"API Key for tenant {tenant_id}",
+            "access_level": access_level,
+            "status": "active",
+            "is_active": True,
+            "created_at": datetime.now(UTC).isoformat(),
+            "created_by": admin_data.get("user_id", "admin"),
+        }).execute()
         
         logger.info(f"API key created for tenant {tenant_id} with access level {access_level}")
         
         return {
             "tenant_id": str(tenant_id),
-            "api_key": "sk_live_...",  # TODO: Generate actual key
-            "key_id": str(UUID()),
+            "api_key": f"settle_{api_key}",
+            "key_id": key_id,
             "access_level": access_level,
-            "created_at": datetime.now(UTC).isoformat()
+            "created_at": datetime.now(UTC).isoformat(),
+            "note": "Save this API key securely. It won't be shown again.",
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating API key for tenant {tenant_id}: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -498,8 +633,25 @@ async def get_tenant_api_key(
     - Verify key exists before integration
     """
     try:
-        # TODO: Implement actual database query
-        raise HTTPException(status_code=501, detail="Not yet implemented")
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        result = db.table("settle_api_keys") \
+            .select("id, tenant_id, name, access_level, status, is_active, created_at, last_used_at, requests_used, requests_limit") \
+            .eq("tenant_id", str(tenant_id)) \
+            .execute()
+        
+        keys = result.data or []
+        
+        if not keys:
+            raise HTTPException(status_code=404, detail="No API keys found for tenant")
+        
+        return {
+            "tenant_id": str(tenant_id),
+            "keys": keys,
+            "total": len(keys),
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -524,14 +676,56 @@ async def rotate_api_key(
     - Tenant request: Tenant requests new key
     """
     try:
-        # TODO: Implement actual key rotation
-        logger.info(f"API key {key_id} rotated")
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        # Get existing key info
+        existing = db.table("settle_api_keys") \
+            .select("*") \
+            .eq("id", str(key_id)) \
+            .execute()
+        
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="API key not found")
+        
+        old_key = existing.data[0]
+        
+        # Generate new key
+        api_key, key_hash = generate_api_key()
+        
+        # Deactivate old key
+        db.table("settle_api_keys") \
+            .update({"is_active": False, "status": "rotated"}) \
+            .eq("id", str(key_id)) \
+            .execute()
+        
+        # Create new key with same tenant/access_level
+        new_key_id = str(uuid4())
+        db.table("settle_api_keys").insert({
+            "id": new_key_id,
+            "tenant_id": old_key.get("tenant_id"),
+            "api_key_hash": key_hash,
+            "name": old_key.get("name", ""),
+            "access_level": old_key.get("access_level", "standard"),
+            "status": "active",
+            "is_active": True,
+            "created_at": datetime.now(UTC).isoformat(),
+            "created_by": admin_data.get("user_id", "admin"),
+            "rotated_from": str(key_id),
+        }).execute()
+        
+        logger.info(f"API key {key_id} rotated → {new_key_id}")
         
         return {
-            "key_id": str(key_id),
-            "new_api_key": "sk_live_...",  # TODO: Generate actual key
-            "rotated_at": datetime.now(UTC).isoformat()
+            "old_key_id": str(key_id),
+            "new_key_id": new_key_id,
+            "new_api_key": f"settle_{api_key}",
+            "rotated_at": datetime.now(UTC).isoformat(),
+            "note": "Save this API key securely. It won't be shown again.",
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error rotating API key {key_id}: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -554,14 +748,32 @@ async def revoke_api_key(
     - Compliance: Revoke keys for violations
     """
     try:
-        # TODO: Implement actual key revocation
-        logger.warning(f"API key {key_id} revoked")
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        result = db.table("settle_api_keys") \
+            .update({
+                "is_active": False,
+                "status": "revoked",
+                "revoked_at": datetime.now(UTC).isoformat(),
+                "revoked_by": admin_data.get("user_id", "admin"),
+            }) \
+            .eq("id", str(key_id)) \
+            .execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="API key not found")
+        
+        logger.warning(f"API key {key_id} revoked by admin {admin_data['user_id']}")
         
         return {
             "key_id": str(key_id),
             "status": "revoked",
-            "revoked_at": datetime.now(UTC).isoformat()
+            "revoked_at": datetime.now(UTC).isoformat(),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error revoking API key {key_id}: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -588,39 +800,72 @@ async def get_analytics_dashboard(
     - Monitor query/report volume
     """
     try:
-        # TODO: Query actual database for metrics
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        # Founding members
+        fm_total = db.table("settle_founding_members").select("id", count="exact").execute()
+        fm_active = db.table("settle_founding_members").select("id", count="exact").eq("status", "active").execute()
+        fm_total_count = fm_total.count if hasattr(fm_total, "count") else 0
+        fm_active_count = fm_active.count if hasattr(fm_active, "count") else 0
+        
+        # Contributions by status
+        contrib_total = db.table("settle_contributions").select("id", count="exact").execute()
+        contrib_approved = db.table("settle_contributions").select("id", count="exact").eq("status", "approved").execute()
+        contrib_pending = db.table("settle_contributions").select("id", count="exact").eq("status", "pending").execute()
+        contrib_flagged = db.table("settle_contributions").select("id", count="exact").eq("status", "flagged").execute()
+        contrib_rejected = db.table("settle_contributions").select("id", count="exact").eq("status", "rejected").execute()
+        
+        # Jurisdictions
+        jurisdictions = db.table("settle_contributions").select("jurisdiction").eq("status", "approved").execute()
+        unique_jurisdictions = set()
+        states = set()
+        case_types = set()
+        for row in (jurisdictions.data or []):
+            j = row.get("jurisdiction", "")
+            if j:
+                unique_jurisdictions.add(j)
+                if "," in j:
+                    states.add(j.rsplit(",", 1)[1].strip())
+            ct = row.get("case_type")
+            if ct:
+                case_types.add(ct)
+        
         return {
             "founding_members": {
-                "total": 0,
-                "active": 0,
+                "total": fm_total_count,
+                "active": fm_active_count,
                 "capacity": 2100,
-                "slots_remaining": 2100
+                "slots_remaining": 2100 - fm_total_count,
             },
             "contributions": {
-                "total": 0,
-                "approved": 0,
-                "pending": 0,
-                "flagged": 0,
-                "rejected": 0
+                "total": contrib_total.count or 0,
+                "approved": contrib_approved.count or 0,
+                "pending": contrib_pending.count or 0,
+                "flagged": contrib_flagged.count or 0,
+                "rejected": contrib_rejected.count or 0,
             },
             "queries": {
                 "total": 0,
                 "today": 0,
                 "this_week": 0,
-                "this_month": 0
+                "this_month": 0,
             },
             "reports": {
                 "total": 0,
                 "pdf": 0,
                 "json": 0,
-                "html": 0
+                "html": 0,
             },
             "database": {
-                "jurisdictions_covered": 0,
-                "states_covered": 0,
-                "case_types": 0
-            }
+                "jurisdictions_covered": len(unique_jurisdictions),
+                "states_covered": len(states),
+                "case_types": len(case_types),
+            },
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting analytics dashboard: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -645,18 +890,49 @@ async def get_usage_analytics(
     - Identify usage trends
     """
     try:
-        # TODO: Implement actual analytics query
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        start = start_date or (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%d")
+        end = end_date or datetime.now(UTC).strftime("%Y-%m-%d")
+        
+        # Count contributions in period
+        contrib_count = db.table("settle_contributions") \
+            .select("id", count="exact") \
+            .gte("created_at", f"{start}T00:00:00+00:00") \
+            .lte("created_at", f"{end}T23:59:59+00:00") \
+            .execute()
+        
+        # Count founding member vs standard contributions
+        fm_contrib = db.table("settle_contributions") \
+            .select("id", count="exact") \
+            .eq("founding_member", True) \
+            .gte("created_at", f"{start}T00:00:00+00:00") \
+            .lte("created_at", f"{end}T23:59:59+00:00") \
+            .execute()
+        
+        # Unique contributors
+        contributors = db.table("settle_contributions") \
+            .select("contributor_user_id") \
+            .gte("created_at", f"{start}T00:00:00+00:00") \
+            .lte("created_at", f"{end}T23:59:59+00:00") \
+            .execute()
+        unique_tenants = len(set(row.get("contributor_user_id") for row in (contributors.data or []) if row.get("contributor_user_id")))
+        
         return {
             "period": {
-                "start": start_date or (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%d"),
-                "end": end_date or datetime.now(UTC).strftime("%Y-%m-%d")
+                "start": start,
+                "end": end,
             },
-            "total_reports": 0,
-            "total_api_calls": 0,
-            "unique_tenants": 0,
-            "founding_member_reports": 0,
-            "standard_user_reports": 0
+            "total_contributions": contrib_count.count or 0,
+            "total_api_calls": 0,  # Would require request logging
+            "unique_tenants": unique_tenants,
+            "founding_member_contributions": fm_contrib.count or 0,
+            "standard_user_contributions": (contrib_count.count or 0) - (fm_contrib.count or 0),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching usage analytics: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -679,16 +955,47 @@ async def get_contribution_analytics(
     - Monitor data quality metrics
     """
     try:
-        # TODO: Implement actual analytics query
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        # Total counts
+        total = db.table("settle_contributions").select("id", count="exact").execute()
+        approved = db.table("settle_contributions").select("id", count="exact").eq("status", "approved").execute()
+        pending = db.table("settle_contributions").select("id", count="exact").eq("status", "pending").execute()
+        rejected = db.table("settle_contributions").select("id", count="exact").eq("status", "rejected").execute()
+        fm = db.table("settle_contributions").select("id", count="exact").eq("founding_member", True).execute()
+        
+        # Jurisdiction breakdown
+        jurisdictions = db.table("settle_contributions") \
+            .select("jurisdiction") \
+            .eq("status", "approved") \
+            .execute()
+        
+        jurisdiction_counts: Dict[str, int] = {}
+        for row in (jurisdictions.data or []):
+            j = row.get("jurisdiction", "Unknown")
+            jurisdiction_counts[j] = jurisdiction_counts.get(j, 0) + 1
+        
+        # Data gaps: jurisdictions with <15 cases
+        data_gaps = [
+            {"jurisdiction": j, "count": c}
+            for j, c in jurisdiction_counts.items()
+            if c < 15
+        ]
+        data_gaps.sort(key=lambda x: x["count"])
+        
         return {
-            "total_contributions": 0,
-            "approved_contributions": 0,
-            "pending_review": 0,
-            "rejected_contributions": 0,
-            "founding_member_contributions": 0,
-            "jurisdictions_covered": 0,
-            "data_gaps": []  # Jurisdictions with <15 cases
+            "total_contributions": total.count or 0,
+            "approved_contributions": approved.count or 0,
+            "pending_review": pending.count or 0,
+            "rejected_contributions": rejected.count or 0,
+            "founding_member_contributions": fm.count or 0,
+            "jurisdictions_covered": len(jurisdiction_counts),
+            "data_gaps": data_gaps,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching contribution analytics: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -711,14 +1018,33 @@ async def get_compliance_analytics(
     - Generate compliance reports for bar committees
     """
     try:
-        # TODO: Implement actual compliance analytics
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        # Count rejected (proxy for PII/anonymization failures)
+        rejected = db.table("settle_contributions").select("id", count="exact").eq("status", "rejected").execute()
+        
+        # Count with blockchain hash
+        all_contrib = db.table("settle_contributions").select("id, blockchain_hash").execute()
+        with_hash = sum(1 for row in (all_contrib.data or []) if row.get("blockchain_hash"))
+        
+        # Count flagged
+        flagged = db.table("settle_contributions").select("id", count="exact").eq("status", "flagged").execute()
+        
+        # Anomaly flags count
+        anomaly_count = db.table("settle_anomaly_flags").select("id", count="exact").execute()
+        
         return {
-            "pii_detections": 0,
-            "anonymization_verified": 0,
-            "blockchain_hashes_generated": 0,
-            "compliance_violations": 0,
-            "last_audit": datetime.now(UTC).isoformat()
+            "pii_detections": rejected.count or 0,
+            "anonymization_verified": (all_contrib.count or 0) - (rejected.count or 0),
+            "blockchain_hashes_generated": with_hash,
+            "compliance_violations": flagged.count or 0,
+            "anomaly_flags_total": anomaly_count.count or 0,
+            "last_audit": datetime.now(UTC).isoformat(),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching compliance analytics: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -741,13 +1067,51 @@ async def get_data_quality_analytics(
     - Track confidence scores
     """
     try:
-        # TODO: Implement actual data quality analytics
+        db = await get_db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        
+        # Outliers
+        outliers = db.table("settle_contributions").select("id", count="exact").eq("is_outlier", True).execute()
+        
+        # Approved contributions for quality analysis
+        approved = db.table("settle_contributions") \
+            .select("id, confidence_score, jurisdiction, case_type, injury_category, medical_bills, outcome_amount_range") \
+            .eq("status", "approved") \
+            .execute()
+        
+        rows = approved.data or []
+        
+        # Average confidence
+        scores = [row.get("confidence_score", 0) for row in rows if row.get("confidence_score") is not None]
+        avg_confidence = sum(scores) / len(scores) if scores else 0.0
+        
+        # Data completeness: check required fields
+        required_fields = ["jurisdiction", "case_type", "injury_category", "medical_bills", "outcome_amount_range"]
+        complete = 0
+        quality_issues = []
+        
+        for row in rows:
+            missing = [f for f in required_fields if not row.get(f)]
+            if not missing:
+                complete += 1
+            else:
+                quality_issues.append({
+                    "contribution_id": row.get("id"),
+                    "missing_fields": missing,
+                })
+        
+        completeness = complete / len(rows) if rows else 0.0
+        
         return {
-            "outliers_flagged": 0,
-            "average_confidence_score": 0.0,
-            "data_completeness": 0.0,
-            "quality_issues": []
+            "outliers_flagged": outliers.count or 0,
+            "average_confidence_score": round(avg_confidence, 3),
+            "data_completeness": round(completeness, 3),
+            "total_approved": len(rows),
+            "quality_issues": quality_issues[:20],  # Limit to first 20
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching data quality analytics: {str(e)}", exc_info=True)
         raise HTTPException(
