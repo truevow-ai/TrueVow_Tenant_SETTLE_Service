@@ -28,7 +28,7 @@ from app.services import verdict_search as verdict_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/internal/verdicts", tags=["internal-verdicts"])
+router = APIRouter(prefix="/verdicts", tags=["internal-verdicts"])
 
 
 # ============================================================================
