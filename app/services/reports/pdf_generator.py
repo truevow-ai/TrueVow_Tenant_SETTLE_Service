@@ -119,7 +119,108 @@ class PDFGenerator:
         confidence_level = estimate_result.get("confidence_level", "N/A")
         methodology = estimate_result.get("methodology", "Statistical Analysis")
         comparable_count = len(comparable_cases)
-        
+
+        # Phase 2.1: Confidence score section for PDF
+        confidence_score_data = estimate_result.get("confidence_score")
+        if confidence_score_data:
+            cs_overall = confidence_score_data.get("overall", 0)
+            cs_label = confidence_score_data.get("label", "N/A")
+            cs_factors = confidence_score_data.get("factors", {})
+            cs_warnings = confidence_score_data.get("warnings", [])
+
+            factor_rows = ""
+            for factor_name, factor_data in cs_factors.items():
+                factor_label = factor_name.replace("_", " ").title()
+                score = factor_data.get("score", 0)
+                max_score = factor_data.get("max", 10)
+                detail = factor_data.get("detail", "")
+                bar_width = score * 10
+                bar_color = "#10b981" if score >= 7 else "#f59e0b" if score >= 4 else "#ef4444"
+                factor_rows += f"""
+                <tr>
+                    <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">{factor_label}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: center;">{score}/{max_score}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">
+                        <div style="background: #e5e7eb; border-radius: 4px; height: 8px; width: 100%;">
+                            <div style="background: {bar_color}; height: 8px; border-radius: 4px; width: {bar_width}%;"></div>
+                        </div>
+                    </td>
+                    <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-size: 9pt; color: #6b7280;">{detail}</td>
+                </tr>
+                """
+
+            warning_items = ""
+            for w in cs_warnings:
+                warning_items += f"<li style='margin: 4px 0;'>{w}</li>"
+
+            confidence_score_section = f"""
+            <h3>Data Confidence Score: {cs_overall}/100 ({cs_label})</h3>
+            <table style="width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt;">
+                <thead>
+                    <tr style="background: #f3f4f6;">
+                        <th style="padding: 8px; text-align: left; border-bottom: 2px solid #d1d5db;">Factor</th>
+                        <th style="padding: 8px; text-align: center; border-bottom: 2px solid #d1d5db;">Score</th>
+                        <th style="padding: 8px; text-align: left; border-bottom: 2px solid #d1d5db;">Bar</th>
+                        <th style="padding: 8px; text-align: left; border-bottom: 2px solid #d1d5db;">Detail</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {factor_rows}
+                </tbody>
+            </table>
+            {"<div style='background: #fef3c7; border-left: 4px solid #f59e0b; padding: 10px; margin: 10px 0;'><strong>Notes:</strong><ul style='margin: 5px 0 0 0; padding-left: 20px;'>" + warning_items + "</ul></div>" if warning_items else ""}
+            """
+        else:
+            confidence_score_section = ""
+
+        # Phase 2.3: Carrier patterns section for PDF
+        carrier_patterns_data = estimate_result.get("carrier_patterns")
+        if carrier_patterns_data and carrier_patterns_data.get("patterns"):
+            pattern_rows = ""
+            for pattern in carrier_patterns_data["patterns"][:5]:  # Top 5
+                category = pattern.get("defendant_category", "N/A")
+                industry = pattern.get("defendant_industry", "")
+                label = f"{category}" + (f" ({industry})" if industry else "")
+                case_count = pattern.get("case_count", 0)
+                settlement_rate = pattern.get("settlement_rate", 0)
+                median = pattern.get("median_settlement")
+                lowball = pattern.get("lowball_indicator", 0)
+
+                median_str = f"${median:,.0f}" if median else "N/A"
+                settlement_pct = f"{settlement_rate:.0%}"
+                lowball_pct = f"{lowball:.0%}"
+
+                pattern_rows += f"""
+                <tr>
+                    <td style="padding: 6px; border-bottom: 1px solid #e5e7eb; font-size: 9pt;">{label}</td>
+                    <td style="padding: 6px; border-bottom: 1px solid #e5e7eb; text-align: center; font-size: 9pt;">{case_count}</td>
+                    <td style="padding: 6px; border-bottom: 1px solid #e5e7eb; text-align: center; font-size: 9pt;">{median_str}</td>
+                    <td style="padding: 6px; border-bottom: 1px solid #e5e7eb; text-align: center; font-size: 9pt;">{settlement_pct}</td>
+                    <td style="padding: 6px; border-bottom: 1px solid #e5e7eb; text-align: center; font-size: 9pt;">{lowball_pct}</td>
+                </tr>
+                """
+
+            carrier_patterns_section = f"""
+            <h3>Defendant Category Settlement Patterns</h3>
+            <p style="font-size: 9pt; color: #6b7280;">Historical data from anonymized settlement contributions. Not predictive.</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 9pt;">
+                <thead>
+                    <tr style="background: #f3f4f6;">
+                        <th style="padding: 6px; text-align: left; border-bottom: 2px solid #d1d5db;">Category</th>
+                        <th style="padding: 6px; text-align: center; border-bottom: 2px solid #d1d5db;">Cases</th>
+                        <th style="padding: 6px; text-align: center; border-bottom: 2px solid #d1d5db;">Median</th>
+                        <th style="padding: 6px; text-align: center; border-bottom: 2px solid #d1d5db;">Settle Rate</th>
+                        <th style="padding: 6px; text-align: center; border-bottom: 2px solid #d1d5db;">Below Median</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {pattern_rows}
+                </tbody>
+            </table>
+            """
+        else:
+            carrier_patterns_section = ""
+
         generated_date = datetime.utcnow().strftime("%B %d, %Y at %I:%M %p UTC")
         
         # Build HTML
@@ -432,6 +533,8 @@ class PDFGenerator:
                 <li><strong>Data Recency:</strong> Cases from recent years</li>
                 <li><strong>Match Quality:</strong> Strong jurisdictional and case type match</li>
             </ul>
+
+            {confidence_score_section}
             
             <div class="info-box">
                 <p style="margin: 0;"><strong>📚 Peer-Reviewed Methodology:</strong> SETTLE uses statistical methods consistent with actuarial science and personal injury valuation standards. Our approach is transparent and verifiable.</p>
@@ -445,6 +548,8 @@ class PDFGenerator:
                 <li>Policy limits, defendant assets, and other factors not captured</li>
             </ul>
             
+            {carrier_patterns_section}
+
             <div class="footer">
                 <p>Page 3 of 4 | SETTLE™ Report ID: {report_id}</p>
             </div>

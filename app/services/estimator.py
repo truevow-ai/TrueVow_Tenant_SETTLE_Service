@@ -9,7 +9,7 @@ Reference: Part 7, Section 7.5 of Technical Documentation
 """
 
 import numpy as np
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional, Dict, Any
 from datetime import datetime, UTC
 import logging
 
@@ -25,6 +25,9 @@ from app.services.intelligence_gate import (
     IntelligenceGate,
     SUPPRESSED_WHEN_INSUFFICIENT,
 )
+from app.services.confidence_score import confidence_calculator
+from app.services.overdemand_cliff import overdemand_cliff_detector
+from app.services.outcome_distribution import outcome_distribution_analyzer
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +266,51 @@ class SettlementEstimator:
             is_pilot_response=gate_result.is_pilot_response,
         )
 
+        # Phase 2.1: Calculate customer-facing Demand Confidence Score
+        confidence_score_result = await confidence_calculator.calculate(
+            n_cases=len(comparable_cases),
+            aggregation_level=gate_result.aggregation_level,
+            n_county=gate_result.n_county,
+            n_state=gate_result.n_state,
+            injury_category=request.injury_category,
+            cases=comparable_cases,
+        )
+
+        # Phase 3.1: Calculate multiplier-based estimate
+        multiplier_result = self._calculate_multiplier_ranges(
+            cases=comparable_cases,
+            medical_bills=request.medical_bills,
+            request=request,
+        )
+
+        # Phase 3.2: Detect overdemand cliff (fire-and-forget, doesn't block response)
+        overdemand_cliff_result = None
+        try:
+            cliff = await overdemand_cliff_detector.detect_cliff(
+                jurisdiction=request.jurisdiction,
+                case_type=request.case_type,
+                injury_category=request.injury_category,
+                defendant_category=request.defendant_category,
+            )
+            overdemand_cliff_result = cliff.model_dump()
+        except Exception as e:
+            logger.warning(f"Overdemand cliff detection failed: {e}")
+
+        # Phase 4: Outcome distribution analysis (fire-and-forget)
+        outcome_distribution_result = None
+        try:
+            outcome_dist = await outcome_distribution_analyzer.analyze(
+                jurisdiction=request.jurisdiction,
+                case_type=request.case_type,
+                injury_category=request.injury_category,
+            )
+            outcome_distribution_result = outcome_dist.model_dump()
+        except Exception as e:
+            logger.warning(f"Outcome distribution analysis failed: {e}")
+
+        # Determine active method (percentile is primary, multiplier as secondary)
+        active_method = "percentile"
+
         # Calculate response time
         response_time_ms = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
 
@@ -284,6 +332,11 @@ class SettlementEstimator:
             range_justification=justification,
             response_time_ms=response_time_ms,
             is_pilot_response=gate_result.is_pilot_response,
+            confidence_score=confidence_score_result.model_dump(),
+            multiplier_method=multiplier_result,
+            active_method=active_method,
+            overdemand_cliff=overdemand_cliff_result,
+            outcome_distribution=outcome_distribution_result,
         )
     
     async def _query_comparable_cases(
@@ -386,6 +439,28 @@ class SettlementEstimator:
             query = query.eq("court_level", request.court_level)
         if request.is_verdict is not None:
             query = query.eq("is_verdict", request.is_verdict)
+
+        # Phase 2.2: Advanced search filters
+        if request.outcome_type:
+            query = query.eq("outcome_type", request.outcome_type)
+        if request.defendant_category:
+            query = query.eq("defendant_category", request.defendant_category)
+        if request.medical_bills_min is not None:
+            query = query.gte("medical_bills", request.medical_bills_min)
+        if request.medical_bills_max is not None:
+            query = query.lte("medical_bills", request.medical_bills_max)
+        if request.exclude_outliers:
+            query = query.eq("is_outlier", False)
+        if request.min_reputation_score is not None:
+            query = query.gte("confidence_score", request.min_reputation_score)
+        if request.comparative_negligence_min is not None:
+            query = query.gte("comparative_negligence_pct", request.comparative_negligence_min)
+        if request.comparative_negligence_max is not None:
+            query = query.lte("comparative_negligence_pct", request.comparative_negligence_max)
+        if request.date_range_from is not None:
+            query = query.gte("created_at", request.date_range_from.isoformat())
+        if request.date_range_to is not None:
+            query = query.lte("created_at", request.date_range_to.isoformat())
         
         return query
 
@@ -471,16 +546,22 @@ class SettlementEstimator:
                 amount = case.exact_outcome_amount
             else:
                 amount = self._bucket_to_midpoint(case.outcome_amount_range)
-            
+
             # Calculate weight from reputation and source type
             rep_score = getattr(case, 'contributor_reputation_score', None) or 0.5
             source_type = getattr(case, 'source_type', None)
             weight = self._calc_submission_weight(rep_score, source_type)
-            
+
+            # Phase 3.5: Apply recency weight
+            contributed_at = getattr(case, 'contributed_at', None)
+            if contributed_at:
+                recency = self._recency_weight(contributed_at, datetime.now(UTC))
+                weight *= recency
+
             if weight == 0.0:
                 low_rep_count += 1
                 continue  # exclude from percentile calculation
-            
+
             amounts.append(amount)
             weights.append(weight)
         
@@ -612,12 +693,12 @@ class SettlementEstimator:
     def _calc_submission_weight(reputation_score: float, source_type: Optional[str]) -> float:
         """
         Calculate submission weight from reputation score and source type.
-        
+
         Returns 0.0 for low-reputation submissions (< 0.2).
         """
         if reputation_score < 0.2:
             return 0.0
-        
+
         source_factors = {
             "firm_submission": 1.0,
             "scraped_verdict": 0.8,
@@ -625,9 +706,187 @@ class SettlementEstimator:
             "court_docket": 0.7,
             "settlement_survey": 0.9,
         }
-        
+
         source_factor = source_factors.get(source_type, 0.8)
         return reputation_score * source_factor
+
+    # Phase 3.5: Recency Weighting
+    @staticmethod
+    def _recency_weight(submission_date: datetime, reference_date: datetime) -> float:
+        """
+        Calculate recency weight based on submission age.
+
+        Time-decay factor:
+        - Last 6 months: 1.5x weight
+        - 6-12 months: 1.2x weight
+        - 1-2 years: 1.0x weight (baseline)
+        - 2+ years: 0.7x weight
+        """
+        # Handle timezone-aware and naive datetimes
+        if submission_date.tzinfo is None:
+            submission_date = submission_date.replace(tzinfo=UTC)
+        if reference_date.tzinfo is None:
+            reference_date = reference_date.replace(tzinfo=UTC)
+
+        days_old = (reference_date - submission_date).days
+        if days_old <= 180:
+            return 1.5
+        elif days_old <= 365:
+            return 1.2
+        elif days_old <= 730:
+            return 1.0
+        else:
+            return 0.7
+
+    # ========================================================================
+    # Phase 3.1: Multiplier Model Layer (SettleCase Models 01-03 equivalent)
+    # ========================================================================
+
+    # Industry-standard multiplier ranges by injury severity
+    INJURY_MULTIPLIERS = {
+        "Soft Tissue": (2.5, 4.0),
+        "Fracture": (4.0, 6.5),
+        "Surgical": (5.0, 8.5),
+        "Catastrophic": (8.0, 12.0),
+        "Fatal": (10.0, 20.0),
+    }
+
+    def _calculate_multiplier_ranges(
+        self,
+        cases: List[SettleContribution],
+        medical_bills: float,
+        request: EstimateRequest,
+    ) -> Dict[str, Any]:
+        """
+        Calculate settlement ranges using multiplier method.
+
+        Three-tier hierarchy (SettleCase Models 01-03):
+        - Model A: Community Comp Set (n>=50 matched) — personal multiplier
+        - Model B: State + Sentinel (n>=20, n<50) — broader comp set
+        - Model C: Standard Multiplier Table (n<20) — industry baseline
+
+        Args:
+            cases: Comparable cases
+            medical_bills: Medical bills amount
+            request: Original estimate request
+
+        Returns:
+            Dict with {low, median, high, model_label, base_multiplier, adjustments_applied}
+        """
+        if medical_bills <= 0:
+            return {
+                "low": 0, "median": 0, "high": 0,
+                "model_label": "Industry Baseline — No medical bills",
+                "base_multiplier": 0,
+                "adjustments_applied": [],
+            }
+
+        n = len(cases)
+
+        # Extract multipliers from cases (settlement / medical_bills)
+        case_multipliers = []
+        for case in cases:
+            exact = getattr(case, "exact_outcome_amount", None)
+            if exact is not None and exact > 0:
+                case_multipliers.append(exact / medical_bills)
+            else:
+                mid = self._bucket_to_midpoint(case.outcome_amount_range)
+                if mid > 0:
+                    case_multipliers.append(mid / medical_bills)
+
+        # Model A: Community Comp Set (n>=50)
+        if n >= 50 and case_multipliers:
+            base_multiplier = sum(case_multipliers) / len(case_multipliers)
+            low = medical_bills * (base_multiplier * 0.90)
+            high = medical_bills * (base_multiplier * 1.10)
+            adjustments = self._apply_multiplier_adjustments(base_multiplier, request)
+            low_adj = low * adjustments["multiplier"]
+            high_adj = high * adjustments["multiplier"]
+            return {
+                "low": round(low_adj, 2),
+                "median": round(medical_bills * base_multiplier, 2),
+                "high": round(high_adj, 2),
+                "model_label": f"Community Comp Set ({n} cases)",
+                "base_multiplier": round(base_multiplier, 2),
+                "adjustments_applied": adjustments["labels"],
+            }
+
+        # Model B: State + Sentinel (n>=20, n<50)
+        if n >= 20 and case_multipliers:
+            base_multiplier = sum(case_multipliers) / len(case_multipliers)
+            low = medical_bills * (base_multiplier * 0.85)
+            high = medical_bills * (base_multiplier * 1.15)
+            adjustments = self._apply_multiplier_adjustments(base_multiplier, request)
+            low_adj = low * adjustments["multiplier"]
+            high_adj = high * adjustments["multiplier"]
+            return {
+                "low": round(low_adj, 2),
+                "median": round(medical_bills * base_multiplier, 2),
+                "high": round(high_adj, 2),
+                "model_label": f"Statewide Benchmark ({n} cases)",
+                "base_multiplier": round(base_multiplier, 2),
+                "adjustments_applied": adjustments["labels"],
+            }
+
+        # Model C: Standard Multiplier Table (n<20)
+        injury_severity = getattr(request, "injury_severity", None)
+        if injury_severity and injury_severity in self.INJURY_MULTIPLIERS:
+            mult_low, mult_high = self.INJURY_MULTIPLIERS[injury_severity]
+        else:
+            # Default: use first injury category or fallback
+            injury_cats = request.injury_category if request.injury_category else []
+            matched = False
+            for cat in injury_cats:
+                for key in self.INJURY_MULTIPLIERS:
+                    if key.lower() in cat.lower():
+                        mult_low, mult_high = self.INJURY_MULTIPLIERS[key]
+                        matched = True
+                        break
+                if matched:
+                    break
+            if not matched:
+                mult_low, mult_high = 3.0, 5.0  # Default range
+
+        base_multiplier = (mult_low + mult_high) / 2
+        low = medical_bills * mult_low
+        high = medical_bills * mult_high
+        return {
+            "low": round(low, 2),
+            "median": round(medical_bills * base_multiplier, 2),
+            "high": round(high, 2),
+            "model_label": "Industry Baseline — Not Personalized",
+            "base_multiplier": round(base_multiplier, 2),
+            "adjustments_applied": [],
+        }
+
+    def _apply_multiplier_adjustments(
+        self,
+        base_multiplier: float,
+        request: EstimateRequest,
+    ) -> Dict[str, Any]:
+        """Apply adjustments to multiplier based on case factors."""
+        adjustment_multiplier = 1.0
+        labels = []
+
+        # Liability adjustments
+        if request.defendant_category == "Government Entity":
+            adjustment_multiplier *= 0.85
+            labels.append("Government defendant: -15%")
+
+        # Comparative negligence
+        if request.comparative_negligence_min is not None:
+            avg_neg = request.comparative_negligence_min
+            if avg_neg > 25:
+                adjustment_multiplier *= 0.75
+                labels.append(f"High comparative negligence ({avg_neg:.0f}%): -25%")
+            elif avg_neg > 10:
+                adjustment_multiplier *= 0.85
+                labels.append(f"Moderate comparative negligence ({avg_neg:.0f}%): -15%")
+
+        return {
+            "multiplier": adjustment_multiplier,
+            "labels": labels,
+        }
     
     def _select_representative_cases(
         self,

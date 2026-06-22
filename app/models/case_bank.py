@@ -3,8 +3,8 @@ Case Bank Data Models - Settlement Contributions and Queries
 """
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from typing import Optional, List, Literal
-from datetime import datetime, UTC
+from typing import Optional, List, Literal, Dict, Any
+from datetime import datetime, date, UTC
 from uuid import UUID
 
 
@@ -106,7 +106,7 @@ class EstimateRequest(BaseModel):
     injury_category: List[str] = Field(..., min_length=1, description="Injury categories (multi-select)")
     medical_bills: float = Field(..., ge=0, description="Medical bills amount")
     
-    # Optional filters
+    # Optional filters (existing)
     primary_diagnosis: Optional[str] = Field(None, description="Primary diagnosis")
     treatment_type: Optional[List[str]] = Field(None, description="Treatment types")
     duration_of_treatment: Optional[str] = Field(None, description="Duration of treatment")
@@ -120,6 +120,17 @@ class EstimateRequest(BaseModel):
     injury_severity: Optional[str] = Field(None, description="Filter by injury severity")
     court_level: Optional[str] = Field(None, description="Filter by court level")
     is_verdict: Optional[bool] = Field(None, description="Filter by verdict vs settlement")
+
+    # Phase 2.2: Advanced search filters
+    outcome_type: Optional[str] = Field(None, description="Filter by outcome type (Settlement, Jury Verdict, etc.)")
+    date_range_from: Optional[date] = Field(None, description="Filter submissions from this date")
+    date_range_to: Optional[date] = Field(None, description="Filter submissions to this date")
+    medical_bills_min: Optional[float] = Field(None, ge=0, description="Minimum medical bills filter")
+    medical_bills_max: Optional[float] = Field(None, ge=0, description="Maximum medical bills filter")
+    exclude_outliers: Optional[bool] = Field(True, description="Exclude flagged outliers (default true)")
+    min_reputation_score: Optional[float] = Field(None, ge=0, le=1, description="Minimum contributor reputation score")
+    comparative_negligence_min: Optional[float] = Field(None, ge=0, le=100, description="Min comparative negligence %")
+    comparative_negligence_max: Optional[float] = Field(None, ge=0, le=100, description="Max comparative negligence %")
     
     @field_validator('jurisdiction')
     @classmethod
@@ -152,6 +163,22 @@ class ComparableCase(BaseModel):
     exact_outcome_amount: Optional[float] = None
     comparative_negligence_pct: Optional[float] = None
     date_of_verdict: Optional[datetime] = None
+
+
+class ConfidenceFactor(BaseModel):
+    """Single factor in the confidence score breakdown."""
+    score: int = Field(..., ge=0, le=10, description="Factor score 0-10")
+    max: int = Field(default=10, description="Maximum possible score")
+    weight: float = Field(..., ge=0, le=1, description="Factor weight (0-1)")
+    detail: str = Field(..., description="Human-readable explanation")
+
+
+class ConfidenceScoreData(BaseModel):
+    """Customer-facing confidence score (0-100) — Phase 2.1."""
+    overall: int = Field(..., ge=10, le=95, description="Overall confidence score (clamped 10-95)")
+    label: str = Field(..., description="Very Strong, Strong, Moderate, Cautious, or Insufficient Data")
+    factors: Dict[str, ConfidenceFactor] = Field(default_factory=dict, description="Breakdown by factor")
+    warnings: List[str] = Field(default_factory=list, description="Actionable warnings for the user")
 
 
 class EstimateResponse(BaseModel):
@@ -208,6 +235,34 @@ class EstimateResponse(BaseModel):
             "True when this estimate was produced via the pilot-mode gate "
             "path. UI MUST render pilot-phase disclosure when True."
         ),
+    )
+
+    # Phase 2.1: Demand Confidence Score (customer-facing DSI equivalent)
+    confidence_score: Optional[ConfidenceScoreData] = Field(
+        None,
+        description="Customer-facing 0-100 confidence score with factor breakdown. Null when insufficient data.",
+    )
+
+    # Phase 3.1: Multiplier Model Layer (SettleCase Models 01-03 equivalent)
+    multiplier_method: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Multiplier-based estimate: {low, median, high, model_label, base_multiplier, adjustments_applied}. Null when insufficient data.",
+    )
+    active_method: str = Field(
+        default="percentile",
+        description="Which method produced the primary estimate: 'percentile' or 'multiplier'.",
+    )
+
+    # Phase 3.2: Overdemand Cliff Detection
+    overdemand_cliff: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Overdemand cliff detection: {threshold, settlement_rate_below, settlement_rate_above, warning, has_cliff}. Null when insufficient data.",
+    )
+
+    # Phase 4: Litigation Outcome Distribution (descriptive, not predictive)
+    outcome_distribution: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Historical outcome distribution: {settlement, plaintiff_verdict, defense_verdict rates}. Descriptive statistics only, not predictive.",
     )
     
     # Comparable cases (for report)

@@ -1,14 +1,16 @@
 # SETTLE Service — Implementation Progress
 
-**Last Updated:** 2026-05-17
-**Current Phase:** Cohort V-front-2 shipped (DONE); analysis page wired to live backend API
-**Overall Status:** Backend DONE through Cohort U-back; frontend DONE through Cohort V-front-2 (typecheck + lint + build all PASS)
+**Last Updated:** 2026-05-19
+**Current Phase:** ALL PHASES COMPLETE (1-5) + E2E infrastructure ready
+**Overall Status:** Backend DONE through Phase 5; 186/186 unit tests PASS; 23/24 DOCKET tests PASS; 14 E2E tests ready; Customer portal Phase 2.1-2.3 UI built and verified
 
 ---
 
 ## Operating model
 
-- **Architect + Executor:** Currently combined (interim Qoder-only mode after Hyperagent architect credits depleted on 2026-05-16). Yasha drives priority via trigger words; agent designs cohorts + executes.
+- **Three-Mode Workflow:** Architect (plan) → Coder (implement) → QA (verify/commit/document)
+- **Mode Switching:** `/mode architect` | `/mode coder` | `/mode qa`
+- **Configuration:** `opencode.json` at repo root, `.opencode/skills/` for agent skills, `.opencode/rules/` for mode-specific rules
 - **Founder:** Yasha (non-technical, self-funded, $30-50/month operating budget).
 - **Backend repo:** this repo (`master` → `origin/main`).
 - **Frontend repo:** `C:\Users\yasha\OneDrive\Documents\TrueVow\Cursor\Truevow_Tenant_Customer_Portal_Service` (NOT yet git-tracked; target remote `https://github.com/truevow-ai/TrueVow_Tenant_Customer_Portal_Service.git`).
@@ -16,6 +18,111 @@
 ---
 
 ## Milestone / Cohort Summary (chronological, newest first)
+
+### Phase 1-5 Complete + E2E Infrastructure ✅ DONE
+**Date:** 2026-05-19 · **Status:** DONE
+
+**Phase 2.5 — Trend Studies / Market Reports:**
+- `app/services/trend_reports.py` — quarterly reports, coverage gaps, founding member highlights
+- `app/api/v1/endpoints/trend_reports.py` — 3 endpoints under `/api/v1/trends/`
+- Tests: 6 new tests in `tests/test_phase2_5.py`
+
+**Phase 3.1 — Multiplier Model Layer:**
+- `app/services/estimator.py` — 3-tier multiplier (Community/State/Industry)
+- `app/models/case_bank.py` — multiplier_method + active_method fields
+- Tests: 6 new tests in `tests/test_phase3_1.py`
+
+**Phase 3.2 — Overdemand Cliff Detection:**
+- `app/services/overdemand_cliff.py` — cliff detection service
+- `app/models/case_bank.py` — overdemand_cliff field
+- Tests: 7 new tests in `tests/test_phase3_2.py`
+
+**Phase 3.3 — Override Tracking:**
+- `database/schemas/settle_override_tracking.sql` — override table
+- `app/services/override_tracking.py` — tracking + analytics service
+- `app/api/v1/endpoints/override_tracking.py` — admin endpoints
+- Tests: 3 new tests in `tests/test_phase3_3.py`
+
+**Phase 3.4 — Weekly Intelligence Digest:**
+- `app/services/weekly_digest.py` — digest generator + HTML email template
+- Tests: 2 new tests in `tests/test_phase3_4_5_6.py`
+
+**Phase 3.5 — Recency Weighting:**
+- `app/services/estimator.py` — time-decay factor (1.5x/<6mo → 0.7x/>2yr)
+
+**Phase 4 — Litigation Outcome Distribution:**
+- `app/services/outcome_distribution.py` — descriptive outcome analysis
+- `app/models/case_bank.py` — outcome_distribution field
+- Tests: 5 new tests in `tests/test_phase4.py`
+
+**Phase 5 — Docket/Litigation Tracker (DOCKET-Service):**
+- `DOCKET-Service/` — entire service scaffolded (app, models, services, API, tests)
+- `DOCKET-Service/database/schemas/docket_supabase.sql` — 2 tables + 3 views
+- `DOCKET-Service/app/services/scraping/courtlistener_scraper.py` — CourtListener scraper
+- Tests: 23 tests (22 pass, 1 skipped)
+
+**E2E Integration Testing:**
+- `tests/test_e2e_integration.py` — 14 E2E API tests
+- `scripts/run-e2e-tests.ps1` — automated test runner
+- `docker-compose.e2e.yml` — full stack Docker Compose
+- `docs/E2E_INTEGRATION_TESTING.md` — setup guide
+- `docs/E2E_TEST_SUITE.md` — test scenario documentation
+
+**Customer Portal UI:**
+- Phase 2.1-2.3 UI built and verified (confidence score, advanced filters, carrier patterns)
+- `CUSTOMER_PORTAL_UI_PLAN_REMAINING.md` — remaining UI plan (multiplier, cliff, outcome, digest)
+
+**Test Results:**
+- SETTLE-Service: 186/186 unit tests PASS
+- DOCKET-Service: 23/24 tests PASS (1 skipped)
+- E2E: 14 tests written, ready to run against live backend
+
+**See:** `docs/01-main/MILESTONE_PHASE_1_5_CHECKPOINT.md` for full checkpoint
+
+### Phase 1-2.3 + Three-Mode Workflow ✅ DONE
+**Date:** 2026-05-19 · **Status:** DONE
+
+**Phase 1 — Internal Verdict Research Engine:**
+- `database/schemas/settle_verdicts_internal.sql` — 3 tables (settle_verdicts, settle_verdict_scrape_jobs, settle_verdict_search_history) + 4 analytics views
+- `app/models/verdicts.py` — 10 Pydantic models for search, CRUD, scrape jobs
+- `app/services/verdict_search.py` — 17-filter search engine, stats, CRUD, bulk insert with dedup
+- `app/api/v1/endpoints/verdicts.py` — 9 endpoints under `/api/v1/internal/verdicts/` (admin-only)
+
+**Phase 2.1 — Demand Confidence Score:**
+- `app/services/confidence_score.py` — 7-factor weighted scoring (clamped 10-95), labels, warnings
+- `app/models/case_bank.py` — ConfidenceScoreData + ConfidenceFactor added to EstimateResponse
+- Estimator integration: confidence score calculated and returned with every estimate
+- PDF report: factor breakdown table with visual bars on Page 3
+
+**Phase 2.2 — Advanced Search Filters:**
+- `app/models/case_bank.py` — 9 new optional filters on EstimateRequest (outcome_type, date ranges, medical bills range, exclude_outliers, min_reputation, comparative negligence)
+- `app/services/estimator.py` — all filters applied in `_build_base_query`
+
+**Phase 2.3 — Carrier Pattern Analytics:**
+- `app/services/carrier_patterns.py` — aggregation by defendant category + industry, settlement rates, lowball indicators
+- `app/api/v1/endpoints/carrier_analytics.py` — `GET /api/v1/analytics/carrier-patterns` (authenticated)
+- PDF report: top 5 defendant category patterns table on Page 3
+
+**Three-Mode Workflow Setup:**
+- `opencode.json` — three-mode configuration (architect, coder, qa) with model settings, skills, rules
+- `.opencode/skills/architect.md` — Architect agent skill documentation
+- `.opencode/skills/coder.md` — Expert Coder agent skill documentation
+- `.opencode/skills/qa.md` — QA & Testing agent skill documentation
+- `.opencode/rules/architect-rules.md` — Architect mode rules
+- `.opencode/rules/coder-rules.md` — Coder mode rules
+- `.opencode/rules/qa-rules.md` — QA mode rules
+- `.opencode/rules/architecture-validation.md` — Architecture validation checklist with phase matrix
+- `.vscode/settings.json` — VSCode settings with opencode mode configuration
+- `.vscode/extensions.json` — Recommended VSCode extensions
+- `.cursor/rules/settle-rules.md` — Cursor agent rules
+- `scripts/truth-check.ps1` — Automated truth command script
+- `tests/test_phase1_phase2.py` — 13 new tests for all Phase 1-2.3 features
+
+**Test Results:** 142/142 tests PASS (129 existing + 13 new)
+
+**See:** `SETTLE_FEATURE_ROADMAP.md` for full roadmap; `.opencode/` for agent configuration
+
+### Cohort V-front-2 — Analysis page wired to live backend API ✅ DONE
 
 ### Cohort V-front-2 — Analysis page wired to live backend API ✅ DONE
 **Date:** 2026-05-17 · **Customer portal commit:** `5d11ef1` · **Status:** DONE

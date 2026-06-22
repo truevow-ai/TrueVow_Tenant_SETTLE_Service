@@ -16,6 +16,16 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _safe_uuid(value: Optional[str]) -> Optional[UUID]:
+    """Parse a UUID string, returning None for invalid/non-UUID values."""
+    if not value:
+        return None
+    try:
+        return UUID(value)
+    except ValueError:
+        return None
+
+
 @router.post("/submit", response_model=ContributionResponse)
 async def submit_contribution(
     request: ContributionRequest,
@@ -60,8 +70,8 @@ async def submit_contribution(
         # Submit contribution
         success, response, error_msg = await contributor.submit_contribution(
             request=request,
-            api_key_id=UUID(api_key_id) if api_key_id else None,
-            contributor_user_id=UUID(user_id) if user_id else None,
+            api_key_id=_safe_uuid(api_key_id),
+            contributor_user_id=_safe_uuid(user_id),
             is_founding_member=is_founding_member,
         )
         

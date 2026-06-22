@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # Supabase (local development)
+  supabase:
+    image: supabase/postgres:15.1.0.147
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: settle_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - supabase_data:/var/lib/postgresql/data
+      - ./database/schemas/settle_supabase.sql:/docker-entrypoint-initdb.d/01-settle.sql
+      - ./database/schemas/settle_verdicts_internal.sql:/docker-entrypoint-initdb.d/02-verdicts.sql
+      - ./database/schemas/settle_override_tracking.sql:/docker-entrypoint-initdb.d/03-overrides.sql
+
+  # SETTLE Backend
+  settle-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      SETTLE_SUPABASE_URL: http://supabase:5432
+      SETTLE_SUPABASE_KEY: postgres
+      SETTLE_ADMIN_API_KEY: test-admin-key
+      SETTLE_ALLOWED_ORIGINS: http://localhost:3000
+      SETTLE_USE_MOCK_DATA: "true"
+    depends_on:
+      - supabase
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002
+
+  # Customer Portal
+  customer-portal:
+    build:
+      context: ../Truevow_Tenant_Customer_Portal_Service
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_SETTLE_API_URL: http://localhost:8002
+      SETTLE_API_KEY: test-admin-key
+    depends_on:
+      - settle-backend
+
+  # DOCKET-Service (optional)
+  docket-service:
+    build:
+      context: ./DOCKET-Service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      DOCKET_SUPABASE_URL: http://supabase:5432
+      DOCKET_SUPABASE_KEY: postgres
+      DOCKET_ALLOWED_ORIGINS: http://localhost:3000
+    depends_on:
+      - supabase
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8003
+
+volumes:
+  supabase_data:

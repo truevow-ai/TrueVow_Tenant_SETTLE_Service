@@ -31,7 +31,17 @@ ENV/
 *.swp
 *.swo
 *~
-.qoder/
+.cursor/
+
+# Node (opencode runtime)
+node_modules/
+
+# Windows artifacts
+nul
+
+# One-off scripts (keep locally, don't track)
+test_db_conn.py
+recover_pyc.py
 
 # Environment variables
 .env
