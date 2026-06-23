@@ -3,6 +3,7 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
 pydantic-settings==2.7.0
+email-validator==2.2.0
 
 # Database
 sqlalchemy==2.0.36
@@ -22,7 +23,7 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.18
 
 # Blockchain verification (settlement report timestamps)
-opentimestamps==0.3.0
+opentimestamps==0.4.5
 
 # Email (Phase 2)
 sendgrid==6.11.0
@@ -41,6 +42,9 @@ stripe==11.3.0
 
 # Monitoring (Phase 2)
 sentry-sdk[fastapi]==2.19.2
+
+# Numerical computing (settlement estimator / analytics)
+numpy==2.2.1
 
 # Utilities
 python-dotenv==1.0.1
