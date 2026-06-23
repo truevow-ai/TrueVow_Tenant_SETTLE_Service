@@ -186,7 +186,7 @@ class TestCarrierPatterns:
     async def test_empty_patterns(self):
         """Test empty result when no data."""
         mock_db = MagicMock()
-        mock_db.table.return_value.select.return_value.eq.return_value.execute = AsyncMock(
+        mock_db.table.return_value.select.return_value.eq.return_value.execute = MagicMock(
             return_value=MagicMock(data=None)
         )
 

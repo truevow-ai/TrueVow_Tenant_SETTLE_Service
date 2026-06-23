@@ -103,7 +103,7 @@ class OverrideTrackingService:
         if created_by:
             insert_data["created_by"] = str(created_by)
 
-        result = await db.table("settle_estimate_overrides").insert(insert_data).execute()
+        result = db.table("settle_estimate_overrides").insert(insert_data).execute()
         return OverrideRecord(**result.data[0])
 
     async def get_analytics(
@@ -129,7 +129,7 @@ class OverrideTrackingService:
         if case_type:
             query = query.eq("case_type", case_type)
 
-        result = await query.execute()
+        result = query.execute()
         rows = result.data or []
 
         if not rows:

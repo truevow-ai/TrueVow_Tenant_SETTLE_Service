@@ -83,7 +83,7 @@ class TestOutcomeDistributionAnalyzer:
         """Test analysis with no data."""
         with patch("app.services.outcome_distribution.get_db") as mock_get_db:
             mock_db = MagicMock()
-            mock_db.table.return_value.select.return_value.eq.return_value.execute = AsyncMock(
+            mock_db.table.return_value.select.return_value.eq.return_value.execute = MagicMock(
                 return_value=MagicMock(data=None)
             )
             mock_get_db.return_value = mock_db
@@ -104,7 +104,7 @@ class TestOutcomeDistributionAnalyzer:
 
         with patch("app.services.outcome_distribution.get_db") as mock_get_db:
             mock_db = MagicMock()
-            mock_db.table.return_value.select.return_value.eq.return_value.execute = AsyncMock(
+            mock_db.table.return_value.select.return_value.eq.return_value.execute = MagicMock(
                 return_value=MagicMock(data=rows)
             )
             mock_get_db.return_value = mock_db

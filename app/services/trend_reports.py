@@ -139,11 +139,11 @@ class TrendReportGenerator:
             prev_quarter_end = date(year, (quarter - 1) * 3 + 1, 1) - timedelta(days=1)
 
         # Get current quarter contributions
-        current_result = await db.table("settle_contributions").select("*").eq("status", "approved").gte("created_at", quarter_start.isoformat()).lte("created_at", f"{quarter_end.isoformat()}T23:59:59").execute()
+        current_result = db.table("settle_contributions").select("*").eq("status", "approved").gte("created_at", quarter_start.isoformat()).lte("created_at", f"{quarter_end.isoformat()}T23:59:59").execute()
         current_rows = current_result.data or []
 
         # Get previous quarter contributions
-        prev_result = await db.table("settle_contributions").select("*").eq("status", "approved").gte("created_at", prev_quarter_start.isoformat()).lte("created_at", f"{prev_quarter_end.isoformat()}T23:59:59").execute()
+        prev_result = db.table("settle_contributions").select("*").eq("status", "approved").gte("created_at", prev_quarter_start.isoformat()).lte("created_at", f"{prev_quarter_end.isoformat()}T23:59:59").execute()
         prev_rows = prev_result.data or []
 
         # Overall stats
@@ -393,7 +393,7 @@ class TrendReportGenerator:
         if db is None:
             rows = []
         else:
-            result = await db.table("settle_contributions").select("jurisdiction").eq("status", "approved").execute()
+            result = db.table("settle_contributions").select("jurisdiction").eq("status", "approved").execute()
             rows = result.data or []
 
         jurisdiction_counts: Dict[str, int] = {}
@@ -441,9 +441,9 @@ class TrendReportGenerator:
             fm_rows = []
             contrib_rows = []
         else:
-            fm_result = await db.table("settle_founding_members").select("*").execute()
+            fm_result = db.table("settle_founding_members").select("*").execute()
             fm_rows = fm_result.data or []
-            contrib_result = await db.table("settle_contributions").select("contributor_user_id").eq("status", "approved").eq("founding_member", True).execute()
+            contrib_result = db.table("settle_contributions").select("contributor_user_id").eq("status", "approved").eq("founding_member", True).execute()
             contrib_rows = contrib_result.data or []
 
         total_fm = len(fm_rows)

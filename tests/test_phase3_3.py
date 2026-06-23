@@ -79,7 +79,7 @@ class TestOverrideTrackingService:
 
         with patch("app.services.override_tracking.get_db") as mock_get_db:
             mock_db = MagicMock()
-            mock_db.table.return_value.insert.return_value.execute = AsyncMock(
+            mock_db.table.return_value.insert.return_value.execute = MagicMock(
                 return_value=MagicMock(data=[mock_record])
             )
             mock_get_db.return_value = mock_db
@@ -103,7 +103,7 @@ class TestOverrideTrackingService:
         """Test analytics with no data."""
         with patch("app.services.override_tracking.get_db") as mock_get_db:
             mock_db = MagicMock()
-            mock_db.table.return_value.select.return_value.execute = AsyncMock(
+            mock_db.table.return_value.select.return_value.execute = MagicMock(
                 return_value=MagicMock(data=None)
             )
             mock_get_db.return_value = mock_db

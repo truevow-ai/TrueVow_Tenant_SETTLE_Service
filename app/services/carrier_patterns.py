@@ -103,7 +103,7 @@ async def get_carrier_patterns(
     if defendant_category:
         query = query.eq("defendant_category", defendant_category)
 
-    result = await query.execute()
+    result = query.execute()
     rows = result.data or []
 
     if not rows:

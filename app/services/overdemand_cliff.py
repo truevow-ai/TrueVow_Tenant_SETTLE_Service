@@ -94,7 +94,7 @@ class OverdemandCliffDetector:
         if defendant_category:
             query = query.eq("defendant_category", defendant_category)
 
-        result = await query.execute()
+        result = query.execute()
         rows = result.data or []
 
         if len(rows) < min_cases_per_bucket * 2:

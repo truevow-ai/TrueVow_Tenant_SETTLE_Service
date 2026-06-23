@@ -23,13 +23,13 @@ class TestWeeklyDigest:
         """Test digest generation with no new data."""
         with patch("app.services.weekly_digest.get_db") as mock_get_db:
             mock_db = MagicMock()
-            mock_db.table.return_value.select.return_value.eq.return_value.gte.return_value.execute = AsyncMock(
+            mock_db.table.return_value.select.return_value.eq.return_value.gte.return_value.execute = MagicMock(
                 return_value=MagicMock(data=None)
             )
-            mock_db.table.return_value.select.return_value.eq.return_value.lt.return_value.execute = AsyncMock(
+            mock_db.table.return_value.select.return_value.eq.return_value.lt.return_value.execute = MagicMock(
                 return_value=MagicMock(data=None)
             )
-            mock_db.table.return_value.select.return_value.eq.return_value.execute = AsyncMock(
+            mock_db.table.return_value.select.return_value.eq.return_value.execute = MagicMock(
                 return_value=MagicMock(data=None)
             )
             mock_get_db.return_value = mock_db

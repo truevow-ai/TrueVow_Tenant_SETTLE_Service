@@ -76,7 +76,7 @@ class WeeklyDigestGenerator:
             # Use first jurisdiction for simple filter
             query = query.ilike("jurisdiction", f"%{user_jurisdictions[0].split(',')[-1].strip()}%")
 
-        result = await query.execute()
+        result = query.execute()
         rows = result.data or []
 
         # Count by jurisdiction
@@ -93,7 +93,7 @@ class WeeklyDigestGenerator:
         # Stale jurisdictions (no new cases in 30 days)
         thirty_days_ago = (now - timedelta(days=30)).isoformat()
         stale_query = db.table("settle_contributions").select("jurisdiction").eq("status", "approved").lt("created_at", thirty_days_ago)
-        stale_result = await stale_query.execute()
+        stale_result = stale_query.execute()
         stale_rows = stale_result.data or []
 
         stale_jurs: Dict[str, datetime] = {}
@@ -106,7 +106,7 @@ class WeeklyDigestGenerator:
 
         # Coverage gaps (jurisdictions with n<50)
         all_query = db.table("settle_contributions").select("jurisdiction").eq("status", "approved")
-        all_result = await all_query.execute()
+        all_result = all_query.execute()
         all_rows = all_result.data or []
 
         all_counts: Dict[str, int] = {}
@@ -124,7 +124,7 @@ class WeeklyDigestGenerator:
             trend_highlights.append(f"{len(coverage_gaps)} jurisdictions need more data (n<50)")
 
         # Total stats
-        total_result = await db.table("settle_contributions").select("id", count="exact").eq("status", "approved").execute()
+        total_result = db.table("settle_contributions").select("id", count="exact").eq("status", "approved").execute()
         total_contributions = total_result.count or 0
 
         total_queries = 0  # Would need settle_queries table

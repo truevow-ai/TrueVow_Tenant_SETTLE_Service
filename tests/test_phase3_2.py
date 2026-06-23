@@ -83,7 +83,7 @@ class TestOverdemandCliffDetector:
         """Test with insufficient data."""
         with patch("app.services.overdemand_cliff.get_db") as mock_get_db:
             mock_db = MagicMock()
-            mock_db.table.return_value.select.return_value.eq.return_value.execute = AsyncMock(
+            mock_db.table.return_value.select.return_value.eq.return_value.execute = MagicMock(
                 return_value=MagicMock(data=[])
             )
             mock_get_db.return_value = mock_db
@@ -107,7 +107,7 @@ class TestOverdemandCliffDetector:
 
         with patch("app.services.overdemand_cliff.get_db") as mock_get_db:
             mock_db = MagicMock()
-            mock_db.table.return_value.select.return_value.eq.return_value.execute = AsyncMock(
+            mock_db.table.return_value.select.return_value.eq.return_value.execute = MagicMock(
                 return_value=MagicMock(data=rows)
             )
             mock_get_db.return_value = mock_db

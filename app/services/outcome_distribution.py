@@ -95,7 +95,7 @@ class OutcomeDistributionAnalyzer:
         if injury_category:
             query = query.cs("injury_category", injury_category)
 
-        result = await query.execute()
+        result = query.execute()
         rows = result.data or []
 
         if not rows:

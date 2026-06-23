@@ -159,7 +159,7 @@ class TestTrendReportGenerator:
         """Test report generation with no data."""
         with patch("app.services.trend_reports.get_db") as mock_get_db:
             mock_db = MagicMock()
-            mock_db.table.return_value.select.return_value.eq.return_value.gte.return_value.lte.return_value.execute = AsyncMock(
+            mock_db.table.return_value.select.return_value.eq.return_value.gte.return_value.lte.return_value.execute = MagicMock(
                 return_value=MagicMock(data=None)
             )
             mock_get_db.return_value = mock_db
@@ -177,7 +177,7 @@ class TestTrendReportGenerator:
         """Test coverage gap analysis with no data."""
         with patch("app.services.trend_reports.get_db") as mock_get_db:
             mock_db = MagicMock()
-            mock_db.table.return_value.select.return_value.eq.return_value.execute = AsyncMock(
+            mock_db.table.return_value.select.return_value.eq.return_value.execute = MagicMock(
                 return_value=MagicMock(data=None)
             )
             mock_get_db.return_value = mock_db
@@ -193,9 +193,9 @@ class TestTrendReportGenerator:
         with patch("app.services.trend_reports.get_db") as mock_get_db:
             mock_db = MagicMock()
             mock_chain = MagicMock()
-            mock_chain.execute = AsyncMock(return_value=MagicMock(data=None))
+            mock_chain.execute = MagicMock(return_value=MagicMock(data=None))
             mock_db.table.return_value.select.return_value.eq.return_value.eq.return_value = mock_chain
-            mock_db.table.return_value.select.return_value.execute = AsyncMock(return_value=MagicMock(data=None))
+            mock_db.table.return_value.select.return_value.execute = MagicMock(return_value=MagicMock(data=None))
             mock_get_db.return_value = mock_db
 
             result = await generator.generate_founding_member_highlights()
