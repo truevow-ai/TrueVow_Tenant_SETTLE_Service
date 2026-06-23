@@ -306,12 +306,22 @@ class ContributionService:
         if not api_key_id:
             return None
         
-        # TODO: Implement actual database update
-        # For now, return mock stats
+        contributions_count = 0
+        if self.db:
+            try:
+                result = (
+                    self.db.table("settle_contributions")
+                    .select("id")
+                    .eq("contributor_api_key_id", str(api_key_id))
+                    .eq("status", "approved")
+                    .execute()
+                )
+                contributions_count = len(result.data) if result and result.data else 0
+            except Exception as e:
+                logger.warning(f"Error fetching founding member stats: {e}")
+        
         return {
-            "contributions_count": 5,  # Mock: increment by 1
-            "queries_count": 12,
-            "reports_generated": 3,
+            "contributions_count": contributions_count,
             "message": "Your Founding Member stats have been updated. Thank you for building the database!"
         }
     
