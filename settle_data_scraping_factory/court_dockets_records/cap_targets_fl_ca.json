@@ -1,0 +1,280 @@
+{
+  "generated_at": "2026-06-23T13:01:56.923452+00:00",
+  "target_states": [
+    "California",
+    "Florida"
+  ],
+  "sources": [
+    {
+      "source_url": "https://static.case.law/JurisdictionsMetadata.json",
+      "sha256": "1b3e25514142b552aa2fd69b78c9322e6eeaa43fb67c3efbab90edd639dc97bc",
+      "fetched_at": "2026-06-23T12:59:32.928909+00:00",
+      "status_code": 200,
+      "content_type": "application/json"
+    },
+    {
+      "source_url": "https://static.case.law/ReportersMetadata.json",
+      "sha256": "fb40c4837c795785076350939afd8b8cc135fe4a6e7b8302967460d9e821f6e5",
+      "fetched_at": "2026-06-23T12:59:33.451907+00:00",
+      "status_code": 200,
+      "content_type": "application/json"
+    }
+  ],
+  "target_count": 22,
+  "targets": [
+    {
+      "state": "California",
+      "reporter_slug": "cal",
+      "short_name": "Cal.",
+      "full_name": "California Reports",
+      "start_year": 1803,
+      "end_year": 2006,
+      "base_url": "https://static.case.law/cal/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-2d",
+      "short_name": "Cal. 2d",
+      "full_name": "California Reports",
+      "start_year": 1930,
+      "end_year": 1969,
+      "base_url": "https://static.case.law/cal-2d/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-3d",
+      "short_name": "Cal. 3d",
+      "full_name": "California Reports",
+      "start_year": 1969,
+      "end_year": 1991,
+      "base_url": "https://static.case.law/cal-3d/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-4th",
+      "short_name": "Cal. 4th",
+      "full_name": "California Reports",
+      "start_year": 1991,
+      "end_year": 2016,
+      "base_url": "https://static.case.law/cal-4th/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-5th",
+      "short_name": "Cal. 5th",
+      "full_name": "Reports of Cases Determined in the Supreme Court of the State of California",
+      "start_year": 2016,
+      "end_year": 2016,
+      "base_url": "https://static.case.law/cal-5th/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-app",
+      "short_name": "Cal. App.",
+      "full_name": "California Appellate Reports",
+      "start_year": 1897,
+      "end_year": 1983,
+      "base_url": "https://static.case.law/cal-app/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-app-2d",
+      "short_name": "Cal. App. 2d",
+      "full_name": "California Appellate Reports, Second Series",
+      "start_year": 1837,
+      "end_year": 1969,
+      "base_url": "https://static.case.law/cal-app-2d/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-app-3d",
+      "short_name": "Cal. App. 3d",
+      "full_name": "California Appellate Reports, Third Series",
+      "start_year": 1969,
+      "end_year": 1991,
+      "base_url": "https://static.case.law/cal-app-3d/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-app-4th",
+      "short_name": "Cal. App. 4th",
+      "full_name": "California Appellate Reports, Fourth Series",
+      "start_year": 1933,
+      "end_year": 2016,
+      "base_url": "https://static.case.law/cal-app-4th/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-app-5th",
+      "short_name": "Cal. App. 5th",
+      "full_name": "California Appellate Reports, Fifth Series",
+      "start_year": 2015,
+      "end_year": 2017,
+      "base_url": "https://static.case.law/cal-app-5th/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-dist-ct",
+      "short_name": "Cal. Dist. Ct.",
+      "full_name": "Reports of Cases Determined in the District Courts of the State of California",
+      "start_year": 1854,
+      "end_year": 1858,
+      "base_url": "https://static.case.law/cal-dist-ct/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-rptr-3d",
+      "short_name": "Cal. Rptr. 3d",
+      "full_name": "West's California Reporter",
+      "start_year": 2012,
+      "end_year": 2019,
+      "base_url": "https://static.case.law/cal-rptr-3d/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-super-ct",
+      "short_name": "Cal. Super. Ct.",
+      "full_name": "California Superior Court Decisions:  Notable Cases",
+      "start_year": 1921,
+      "end_year": 1926,
+      "base_url": "https://static.case.law/cal-super-ct/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "cal-unrep",
+      "short_name": "Cal. Unrep.",
+      "full_name": "California Unreported Cases",
+      "start_year": 1855,
+      "end_year": 1910,
+      "base_url": "https://static.case.law/cal-unrep/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "coffey",
+      "short_name": "Coffey",
+      "full_name": "Reports of Decisions in Probate, by James V. Coffey, Judge of the Superior Court in and for the City and County of San Francisco, State of California. Reported and Annotated by Peter V. Ross and Jeremiah V. Coffey",
+      "start_year": 1880,
+      "end_year": 1915,
+      "base_url": "https://static.case.law/coffey/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "California",
+      "reporter_slug": "myrick",
+      "short_name": "Myrick",
+      "full_name": "Reports of Cases in the Probate Court of the City and County of San Francisco, from January 1, 1872, to December 31, 1879, Milton H. Myrick, Probate Judge",
+      "start_year": 1872,
+      "end_year": 1879,
+      "base_url": "https://static.case.law/myrick/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "Florida",
+      "reporter_slug": "fla",
+      "short_name": "Fla.",
+      "full_name": "Florida Reports",
+      "start_year": 1825,
+      "end_year": 1948,
+      "base_url": "https://static.case.law/fla/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "Florida",
+      "reporter_slug": "fla-supp",
+      "short_name": "Fla. Supp.",
+      "full_name": "Florida Supplement",
+      "start_year": 1946,
+      "end_year": 1979,
+      "base_url": "https://static.case.law/fla-supp/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "Florida",
+      "reporter_slug": "fla-supp-2d",
+      "short_name": "Fla. Supp. 2d",
+      "full_name": "Florida Supplement Second",
+      "start_year": 1974,
+      "end_year": 1991,
+      "base_url": "https://static.case.law/fla-supp-2d/",
+      "multi_state": false,
+      "other_states": []
+    },
+    {
+      "state": "Florida",
+      "reporter_slug": "so",
+      "short_name": "So.",
+      "full_name": "Southern Reporter",
+      "start_year": 1924,
+      "end_year": 1941,
+      "base_url": "https://static.case.law/so/",
+      "multi_state": true,
+      "other_states": [
+        "Alabama",
+        "Louisiana",
+        "Mississippi"
+      ]
+    },
+    {
+      "state": "Florida",
+      "reporter_slug": "so2d",
+      "short_name": "So.2d",
+      "full_name": "Southern Reporter, Second Series",
+      "start_year": 1923,
+      "end_year": 2009,
+      "base_url": "https://static.case.law/so2d/",
+      "multi_state": true,
+      "other_states": [
+        "Alabama",
+        "Louisiana",
+        "Mississippi"
+      ]
+    },
+    {
+      "state": "Florida",
+      "reporter_slug": "so3d",
+      "short_name": "So.3d",
+      "full_name": "Southern Reporter, Third Series",
+      "start_year": 2000,
+      "end_year": 2019,
+      "base_url": "https://static.case.law/so3d/",
+      "multi_state": true,
+      "other_states": [
+        "Alabama",
+        "Louisiana",
+        "Mississippi"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+# Dependencies for the SETTLE data scraping factory (settle_data_scraping_factory/).
+# Kept OUT of the API service image (.dockerignore excludes the factory).
+# See docs/01-main/SCRAPING_TOOLING_AND_HUMAN_EMULATION.md for the escalation ladder.
+
+# L0 — plain HTTP / bulk (used now)
+httpx>=0.27
+python-dotenv>=1.0
+
+# L1 — TLS/JA3 impersonation (add when a site blocks plain HTTP)
+# curl_cffi>=0.7
+
+# L2 — stealth browser (add for JS-heavy / fingerprinting sites)
+# playwright>=1.44
+# patchright>=1.44
+# browserforge>=1.2
+# beautifulsoup4>=4.12
+
+# L3 — Cloudflare challenge solver runs as a separate Docker service (FlareSolverr),
+# not a pip package.

@@ -60,6 +60,10 @@ logs/
 # Data (bulk scraping artifacts — FJC dumps, CSV outputs, etc.)
 data/
 
+# SETTLE data scraping factory — runtime artifacts (network cache + scraped outputs)
+settle_data_scraping_factory/_cache/
+settle_data_scraping_factory/**/out/
+
 # OS
 .DS_Store
 Thumbs.db
