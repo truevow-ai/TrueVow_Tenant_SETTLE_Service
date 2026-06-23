@@ -483,7 +483,7 @@ class PDFGenerator:
                     </tr>
             """
         
-        html += """
+        html += f"""
                 </tbody>
             </table>
             
