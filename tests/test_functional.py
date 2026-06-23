@@ -8,11 +8,43 @@ They verify actual behavior with real data.
 import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
+from uuid import uuid4
+from datetime import datetime, UTC
 
 from app.main import app
+from app.models.case_bank import SettleContribution
 from app.services.intelligence_gate import AggregateGateResult, MIN_AGGREGATE_N
 
 client = TestClient(app)
+
+
+def _build_mock_comparable_cases(n: int = 120):
+    """Build a spread of approved SettleContribution rows so the estimator's
+    percentile path yields a strictly-increasing range without a live DB.
+    (The estimator's built-in mock case generator was removed in commit d3612c3,
+    so tests that exercise the 'sufficient data' path must supply their own.)"""
+    now = datetime.now(UTC)
+    cases = []
+    for i in range(n):
+        cases.append(
+            SettleContribution(
+                id=uuid4(),
+                jurisdiction="Maricopa County, AZ",
+                case_type="Auto Accident",
+                injury_category=["Spinal Injury"],
+                medical_bills=50000.0,
+                defendant_category="Business",
+                outcome_type="Settlement",
+                outcome_amount_range="300k_600k",
+                exact_outcome_amount=100000.0 + (i * 5000.0),
+                contributed_at=now,
+                created_at=now,
+                updated_at=now,
+                status="approved",
+                confidence_score=1.0,
+            )
+        )
+    return cases
 
 
 # Year-2 mandatory v2 fields — every /submit payload must carry these.
@@ -43,6 +75,9 @@ def patch_gate_sufficient():
     with patch(
         "app.services.estimator.IntelligenceGate.check",
         new=AsyncMock(return_value=stub_result),
+    ), patch(
+        "app.services.estimator.SettlementEstimator._query_comparable_cases",
+        new=AsyncMock(return_value=_build_mock_comparable_cases()),
     ):
         yield
 
@@ -135,7 +170,7 @@ def test_contribution_endpoint(auth_headers):
     assert "status" in data
     
     # Verify blockchain hash format
-    assert data["blockchain_hash"].startswith("ots_")
+    assert data["blockchain_hash"].startswith("sha256:")
     assert data["status"] == "pending"
 
 
