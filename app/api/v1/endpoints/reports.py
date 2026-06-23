@@ -2,7 +2,7 @@
 Report Generation Endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Response
 from typing import Optional
 from uuid import uuid4
 from datetime import datetime, UTC
@@ -12,6 +12,7 @@ from app.models.reports import ReportRequest, ReportResponse, ReportSummary
 from app.models.case_bank import EstimateRequest
 from app.services.estimator import SettlementEstimator
 from app.services.contributor import ContributionService
+from app.services.reports.pdf_generator import PDFGenerator
 from app.core.auth import require_any_auth
 from app.core.database import get_db
 
@@ -132,39 +133,71 @@ async def generate_report(
         }
         report_hash = contributor_service._generate_blockchain_hash(report_id, report_data)
         
-        # Generate report URL (placeholder)
-        report_url = f"https://settle.truevow.law/reports/{report_id}.{request.format}"
-        
-        # For JSON format, return summary data
-        summary = None
-        if request.format == "json":
-            summary = {
-                "report_id": str(report_id),
-                "case_overview": {
-                    "query_id": str(query_id),
-                    "medical_bills": query_data.get('medical_bills', 0) if query_data else 0
-                },
-                "settlement_range": {
-                    "percentile_25": estimate_response.percentile_25,
-                    "median": estimate_response.median,
-                    "percentile_75": estimate_response.percentile_75,
-                    "percentile_95": estimate_response.percentile_95
-                },
-                "comparable_cases_count": estimate_response.n_cases,
-                "confidence_level": estimate_response.confidence,
-                "generated_at": datetime.now(UTC).isoformat()
+        if request.format == "pdf":
+            pdf_gen = PDFGenerator()
+            query_dict = query_data or {
+                "jurisdiction": "Unknown",
+                "case_type": "Unknown",
+                "injury_category": [],
+                "medical_bills": 0,
             }
+            estimate_dict = {
+                "percentile_25": estimate_response.percentile_25,
+                "median": estimate_response.median,
+                "percentile_75": estimate_response.percentile_75,
+                "percentile_95": estimate_response.percentile_95,
+                "n_cases": estimate_response.n_cases,
+                "confidence": estimate_response.confidence,
+            }
+            comparable_list = []
+            if hasattr(estimate_response, 'comparable_cases') and estimate_response.comparable_cases:
+                comparable_list = [
+                    c.model_dump() if hasattr(c, 'model_dump') else c.__dict__
+                    for c in estimate_response.comparable_cases[:15]
+                ]
+            pdf_bytes = pdf_gen.generate_report(
+                query_data=query_dict,
+                estimate_result=estimate_dict,
+                comparable_cases=comparable_list,
+                blockchain_hash=report_hash,
+                report_id=str(report_id),
+            )
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'attachment; filename="settle-report-{report_id}.pdf"',
+                    "X-Report-Id": str(report_id),
+                    "X-Blockchain-Hash": report_hash,
+                },
+            )
+        
+        summary = {
+            "report_id": str(report_id),
+            "case_overview": {
+                "query_id": str(query_id),
+                "medical_bills": query_data.get('medical_bills', 0) if query_data else 0
+            },
+            "settlement_range": {
+                "percentile_25": estimate_response.percentile_25,
+                "median": estimate_response.median,
+                "percentile_75": estimate_response.percentile_75,
+                "percentile_95": estimate_response.percentile_95
+            },
+            "comparable_cases_count": estimate_response.n_cases,
+            "confidence_level": estimate_response.confidence,
+            "generated_at": datetime.now(UTC).isoformat()
+        }
         
         response = ReportResponse(
             report_id=report_id,
             query_id=request.query_id if request.query_id else query_id,
-            report_url=report_url,
+            report_url=f"/api/v1/reports/download/{report_id}",
             ots_hash=report_hash,
             format=request.format,
             summary=summary,
             message=(
                 f"Report generated successfully. "
-                f"Download link valid for 7 days. "
                 f"Blockchain hash: {report_hash[:16]}..."
             )
         )
