@@ -355,38 +355,35 @@ class SettlementEstimator:
             `or` over two ILIKE patterns is brittle across client versions)
             and the results are merged/deduped.
 
-        Falls back to _generate_mock_cases() when self.db is None or the
-        jurisdiction is malformed — preserves current test behavior.
+        Falls back to empty list when self.db is None or the
+        jurisdiction is malformed — triggers insufficient_data response.
         """
         if self.db is None:
-            logger.info(
-                "_query_comparable_cases: self.db is None, falling back to mock"
+            logger.warning(
+                "_query_comparable_cases: self.db is None, returning empty (insufficient_data)"
             )
-            return self._generate_mock_cases(request)
+            return []
 
-        # Parse state suffix once — needed for state tier; for county tier we
-        # also use it as a validity check (malformed jurisdiction -> mock).
         try:
             state = request.jurisdiction.rsplit(",", 1)[1].strip()
         except (IndexError, AttributeError) as e:
             logger.warning(
                 f"_query_comparable_cases: malformed jurisdiction "
-                f"{request.jurisdiction!r}: {e}. Falling back to mock."
+                f"{request.jurisdiction!r}: {e}. Returning empty."
             )
-            return self._generate_mock_cases(request)
+            return []
 
         if not state:
             logger.warning(
                 f"_query_comparable_cases: empty state extracted from "
-                f"{request.jurisdiction!r}. Falling back to mock."
+                f"{request.jurisdiction!r}. Returning empty."
             )
-            return self._generate_mock_cases(request)
+            return []
 
         try:
             if aggregation_level == "state":
                 rows = self._query_state_tier(request, state)
             else:
-                # Default: county tier (back-compat with existing call sites)
                 rows = self._query_county_tier(request)
         except Exception as e:
             logger.exception(
@@ -394,9 +391,9 @@ class SettlementEstimator:
                 f"(tier={aggregation_level}, state={state}, "
                 f"case_type={request.case_type!r}, "
                 f"injury_category={request.injury_category}): {e}. "
-                f"Falling back to mock."
+                f"Returning empty."
             )
-            return self._generate_mock_cases(request)
+            return []
 
         logger.info(
             f"_query_comparable_cases: returned {len(rows)} rows "
@@ -1056,57 +1053,4 @@ class SettlementEstimator:
             )
 
         return justification
-    
-    def _generate_mock_cases(self, request: EstimateRequest) -> List[SettleContribution]:
-        """
-        Generate mock comparable cases for testing.
-        
-        TODO: Remove this when database is connected.
-        
-        Args:
-            request: Estimate request
-            
-        Returns:
-            List of mock SettleContribution objects
-        """
-        import uuid
-        from datetime import timedelta
-        
-        # Generate 25 mock cases with variation
-        mock_cases = []
-        base_amount_ranges = [
-            "$50k-$100k", "$100k-$150k", "$150k-$225k", "$225k-$300k", "$300k-$600k"
-        ]
-        
-        for i in range(25):
-            mock_case = SettleContribution(
-                id=uuid.uuid4(),
-                jurisdiction=request.jurisdiction,
-                case_type=request.case_type or "Motor Vehicle Accident",
-                injury_category=request.injury_category,
-                primary_diagnosis="Spinal Injury",
-                treatment_type=["Physical Therapy", "Surgery"],
-                duration_of_treatment="6-12 months",
-                imaging_findings=["Herniated Disc"],
-                medical_bills=request.medical_bills * (0.7 + i * 0.02),  # Vary by ±30%
-                lost_wages=5000 + i * 1000,
-                policy_limits="$100k/$300k",
-                defendant_category="Business",
-                outcome_type="Settlement",
-                outcome_amount_range=base_amount_ranges[i % len(base_amount_ranges)],
-                contributed_at=datetime.now(UTC) - timedelta(days=i * 10),
-                blockchain_hash=f"mock_hash_{i}",
-                consent_confirmed=True,
-                contributor_api_key_id=uuid.uuid4(),
-                founding_member=True,
-                created_at=datetime.now(UTC) - timedelta(days=i * 10),
-                updated_at=datetime.now(UTC) - timedelta(days=i * 10),
-                status="approved",
-                rejection_reason=None,
-                is_outlier=False,
-                confidence_score=1.0
-            )
-            mock_cases.append(mock_case)
-        
-        return mock_cases
 

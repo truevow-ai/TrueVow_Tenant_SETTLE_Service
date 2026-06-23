@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 from typing import Optional
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 
 from app.services.intelligence_gate import (
     IntelligenceGate,
@@ -19,7 +19,31 @@ from app.services.intelligence_gate import (
     MIN_AGGREGATE_N,
 )
 from app.services.estimator import SettlementEstimator
-from app.models.case_bank import EstimateRequest
+from app.models.case_bank import EstimateRequest, SettleContribution
+
+
+def _make_test_contributions(n=25, jurisdiction="Duval County, FL", case_type="Motor Vehicle Accident"):
+    from uuid import uuid4
+    from datetime import datetime, timedelta, UTC
+    cases = []
+    ranges = ["$50k-$100k", "$100k-$150k", "$150k-$225k", "$225k-$300k", "$300k-$600k"]
+    for i in range(n):
+        cases.append(SettleContribution(
+            id=uuid4(), jurisdiction=jurisdiction, case_type=case_type,
+            injury_category=["Spinal Injury"], primary_diagnosis="Spinal Injury",
+            treatment_type=["Physical Therapy"], duration_of_treatment="6-12 months",
+            imaging_findings=["Herniated Disc"], medical_bills=30000 + i * 2000,
+            lost_wages=5000 + i * 1000, policy_limits="$100k/$300k",
+            defendant_category="Business", outcome_type="Settlement",
+            outcome_amount_range=ranges[i % len(ranges)],
+            contributed_at=datetime.now(UTC) - timedelta(days=i * 10),
+            blockchain_hash=f"test_hash_{i}", consent_confirmed=True,
+            contributor_api_key_id=uuid4(), founding_member=True,
+            created_at=datetime.now(UTC) - timedelta(days=i * 10),
+            updated_at=datetime.now(UTC) - timedelta(days=i * 10),
+            status="approved", rejection_reason=None, is_outlier=False, confidence_score=1.0,
+        ))
+    return cases
 
 
 # ---------------------------------------------------------------------------
@@ -380,13 +404,14 @@ async def test_estimator_runs_full_pipeline_when_gate_passes():
         injury_category=["Spinal Injury"],
         medical_bills=25000.0,
     )
-    response = await estimator.estimate_settlement_range(request)
+    test_cases = _make_test_contributions(25, "Duval County, FL", "Motor Vehicle Accident")
+    with patch.object(estimator, '_query_comparable_cases', return_value=test_cases):
+        response = await estimator.estimate_settlement_range(request)
 
     assert response.confidence in {"medium", "high"}
     assert response.own_case_only is False
     assert response.suppressed_features == []
     assert response.median > 0
-    # Option D: county-tier response carries tier signal.
     assert response.aggregation_level == "county"
     assert response.n_county == 120
 
@@ -421,9 +446,10 @@ async def test_estimator_state_tier_response_contract():
         injury_category=["Spinal Injury"],
         medical_bills=25000.0,
     )
-    response = await estimator.estimate_settlement_range(request)
+    test_cases = _make_test_contributions(25, "Miami-Dade County, FL", "Motor Vehicle Accident")
+    with patch.object(estimator, '_query_comparable_cases', return_value=test_cases):
+        response = await estimator.estimate_settlement_range(request)
 
-    # Response contract: tier signal propagated.
     assert response.aggregation_level == "state"
     assert response.n_county == 13
     assert response.n_state == 157

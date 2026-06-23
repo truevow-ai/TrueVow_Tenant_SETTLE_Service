@@ -5,11 +5,45 @@ Unit tests for Settlement Estimator Service
 import pytest
 from uuid import uuid4
 from datetime import datetime, timedelta, UTC
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 
 from app.services.estimator import SettlementEstimator
 from app.services.intelligence_gate import AggregateGateResult, MIN_AGGREGATE_N
 from app.models.case_bank import EstimateRequest, SettleContribution
+
+
+def _make_test_cases(n=25, jurisdiction="Maricopa County, AZ", case_type="Auto Accident"):
+    cases = []
+    ranges = ["$50k-$100k", "$100k-$150k", "$150k-$225k", "$225k-$300k", "$300k-$600k"]
+    for i in range(n):
+        cases.append(SettleContribution(
+            id=uuid4(),
+            jurisdiction=jurisdiction,
+            case_type=case_type,
+            injury_category=["Spinal Injury"],
+            primary_diagnosis="Spinal Injury",
+            treatment_type=["Physical Therapy"],
+            duration_of_treatment="6-12 months",
+            imaging_findings=["Herniated Disc"],
+            medical_bills=30000 + i * 2000,
+            lost_wages=5000 + i * 1000,
+            policy_limits="$100k/$300k",
+            defendant_category="Business",
+            outcome_type="Settlement",
+            outcome_amount_range=ranges[i % len(ranges)],
+            contributed_at=datetime.now(UTC) - timedelta(days=i * 10),
+            blockchain_hash=f"test_hash_{i}",
+            consent_confirmed=True,
+            contributor_api_key_id=uuid4(),
+            founding_member=True,
+            created_at=datetime.now(UTC) - timedelta(days=i * 10),
+            updated_at=datetime.now(UTC) - timedelta(days=i * 10),
+            status="approved",
+            rejection_reason=None,
+            is_outlier=False,
+            confidence_score=1.0,
+        ))
+    return cases
 
 
 def _sufficient_gate(n: int = 120) -> MagicMock:
@@ -39,9 +73,10 @@ async def test_estimator_with_sufficient_cases():
         medical_bills=50000.00
     )
 
-    response = await estimator.estimate_settlement_range(request)
+    test_cases = _make_test_cases(25)
+    with patch.object(estimator, '_query_comparable_cases', return_value=test_cases):
+        response = await estimator.estimate_settlement_range(request)
 
-    # Assertions
     assert response.n_cases >= 15, "Should have at least 15 cases"
     assert response.confidence in ["medium", "high"]
     assert response.percentile_25 < response.median < response.percentile_75 < response.percentile_95
