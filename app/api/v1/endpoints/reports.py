@@ -133,6 +133,19 @@ async def generate_report(
         }
         report_hash = contributor_service._generate_blockchain_hash(report_id, report_data)
         
+        if db:
+            try:
+                db.table("settle_reports").insert({
+                    "id": str(report_id),
+                    "query_id": str(request.query_id) if request.query_id else str(query_id),
+                    "api_key_id": str(api_key_data.get("api_key_id", "")),
+                    "format": request.format,
+                    "ots_hash": report_hash,
+                    "created_at": datetime.now(UTC).isoformat(),
+                }).execute()
+            except Exception as e:
+                logger.warning(f"Failed to persist report record: {e}")
+        
         if request.format == "pdf":
             pdf_gen = PDFGenerator()
             query_dict = query_data or {

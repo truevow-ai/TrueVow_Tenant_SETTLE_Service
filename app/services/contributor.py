@@ -260,13 +260,10 @@ class ContributionService:
         # Step 2: Compute SHA-256 hash
         sha256_hash = hashlib.sha256(canonical_json.encode()).hexdigest()
         
-        # Step 3: Submit to OpenTimestamps
-        # TODO: Implement actual OpenTimestamps submission
-        # For now, return the SHA-256 hash with a prefix
-        ots_hash = f"ots_{sha256_hash[:16]}"
+        ots_hash = f"sha256:{sha256_hash}"
         
         logger.info(
-            f"Generated blockchain hash for contribution {contribution_id}: {ots_hash}"
+            f"Generated integrity hash for contribution {contribution_id}: {ots_hash[:32]}..."
         )
         
         return ots_hash
