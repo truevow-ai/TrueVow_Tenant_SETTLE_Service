@@ -189,7 +189,7 @@ async def search_verdicts(filters: VerdictSearchFilter) -> VerdictSearchResponse
     query = query.range(offset, offset + filters.page_size - 1)
 
     # Execute
-    result = await query.execute()
+    result = query.execute()
 
     response_time_ms = int((time.time() - start_time) * 1000)
 
@@ -241,46 +241,46 @@ async def get_verdict_stats() -> VerdictStatsResponse:
         )
 
     # Total count
-    total_result = await db.table("settle_verdicts").select("id", count="exact").is_("deleted_at", None).execute()
+    total_result = db.table("settle_verdicts").select("id", count="exact").is_("deleted_at", None).execute()
     total_count = total_result.count if total_result.count else 0
 
     # By outcome type
-    outcome_result = await db.table("settle_verdicts").select("outcome_type").is_("deleted_at", None).execute()
+    outcome_result = db.table("settle_verdicts").select("outcome_type").is_("deleted_at", None).execute()
     by_outcome = {}
     for row in outcome_result.data or []:
         ot = row.get("outcome_type", "unknown")
         by_outcome[ot] = by_outcome.get(ot, 0) + 1
 
     # By case type
-    case_type_result = await db.table("settle_verdicts").select("case_type").is_("deleted_at", None).execute()
+    case_type_result = db.table("settle_verdicts").select("case_type").is_("deleted_at", None).execute()
     by_case_type = {}
     for row in case_type_result.data or []:
         ct = row.get("case_type", "unknown")
         by_case_type[ct] = by_case_type.get(ct, 0) + 1
 
     # By jurisdiction
-    jurisdiction_result = await db.table("settle_verdicts").select("jurisdiction").is_("deleted_at", None).execute()
+    jurisdiction_result = db.table("settle_verdicts").select("jurisdiction").is_("deleted_at", None).execute()
     by_jurisdiction = {}
     for row in jurisdiction_result.data or []:
         j = row.get("jurisdiction", "unknown")
         by_jurisdiction[j] = by_jurisdiction.get(j, 0) + 1
 
     # By review status
-    review_result = await db.table("settle_verdicts").select("review_status").is_("deleted_at", None).execute()
+    review_result = db.table("settle_verdicts").select("review_status").is_("deleted_at", None).execute()
     by_review = {}
     for row in review_result.data or []:
         rs = row.get("review_status", "unknown")
         by_review[rs] = by_review.get(rs, 0) + 1
 
     # By source
-    source_result = await db.table("settle_verdicts").select("source").is_("deleted_at", None).execute()
+    source_result = db.table("settle_verdicts").select("source").is_("deleted_at", None).execute()
     by_source = {}
     for row in source_result.data or []:
         s = row.get("source", "unknown")
         by_source[s] = by_source.get(s, 0) + 1
 
     # Averages (need to fetch numeric fields)
-    numeric_result = await db.table("settle_verdicts").select(
+    numeric_result = db.table("settle_verdicts").select(
         "confidence_score, completeness_score, total_verdict, settlement_amount, medical_bills, trial_duration_days"
     ).is_("deleted_at", None).execute()
 
@@ -293,7 +293,7 @@ async def get_verdict_stats() -> VerdictStatsResponse:
     avg_trial = _avg(rows, "trial_duration_days")
 
     # Date range
-    date_result = await (db.table("settle_verdicts")
+    date_result = (db.table("settle_verdicts")
         .select("verdict_date")
         .is_("deleted_at", None)
         .not_.is_("verdict_date", None)
@@ -301,7 +301,7 @@ async def get_verdict_stats() -> VerdictStatsResponse:
         .limit(1)
         .execute())
 
-    date_result_max = await (db.table("settle_verdicts")
+    date_result_max = (db.table("settle_verdicts")
         .select("verdict_date")
         .is_("deleted_at", None)
         .not_.is_("verdict_date", None)
@@ -344,7 +344,7 @@ def _avg(rows: List[Dict], field: str) -> Optional[float]:
 async def get_verdict_by_id(verdict_id: UUID) -> Optional[VerdictRecord]:
     """Get a single verdict record by ID."""
     db = await get_db()
-    result = await db.table("settle_verdicts").select("*").eq("id", str(verdict_id)).execute()
+    result = db.table("settle_verdicts").select("*").eq("id", str(verdict_id)).execute()
     if result.data and len(result.data) > 0:
         return VerdictRecord(**result.data[0])
     return None
@@ -359,7 +359,7 @@ async def create_verdict(data: VerdictCreateRequest, source: str = "manual_entry
     insert_data["confidence_score"] = 0.5
     insert_data["completeness_score"] = _calculate_completeness(insert_data)
 
-    result = await db.table("settle_verdicts").insert(insert_data).execute()
+    result = db.table("settle_verdicts").insert(insert_data).execute()
     return VerdictRecord(**result.data[0])
 
 
@@ -377,7 +377,7 @@ async def update_verdict(verdict_id: UUID, data: VerdictUpdateRequest) -> Option
             merged.update(update_data)
             update_data["completeness_score"] = _calculate_completeness(merged)
 
-    result = await db.table("settle_verdicts").update(update_data).eq("id", str(verdict_id)).execute()
+    result = db.table("settle_verdicts").update(update_data).eq("id", str(verdict_id)).execute()
     if result.data and len(result.data) > 0:
         return VerdictRecord(**result.data[0])
     return None
@@ -390,7 +390,7 @@ async def delete_verdict(verdict_id: UUID, deleted_by: Optional[UUID] = None) ->
     if deleted_by:
         update_data["deleted_by"] = str(deleted_by)
 
-    result = await db.table("settle_verdicts").update(update_data).eq("id", str(verdict_id)).execute()
+    result = db.table("settle_verdicts").update(update_data).eq("id", str(verdict_id)).execute()
     return result.data is not None and len(result.data) > 0
 
 
@@ -400,6 +400,9 @@ async def bulk_insert_verdicts(records: List[Dict]) -> Tuple[int, int, int]:
     Returns (inserted, skipped, failed) counts.
     """
     db = await get_db()
+    if db is None:
+        logger.warning("bulk_insert_verdicts: no database configured (mock mode); nothing inserted")
+        return 0, 0, 0
     inserted = 0
     skipped = 0
     failed = 0
@@ -411,7 +414,7 @@ async def bulk_insert_verdicts(records: List[Dict]) -> Tuple[int, int, int]:
                 dedup_query = db.table("settle_verdicts").select("id").eq("case_name", record["case_name"]).eq("jurisdiction", record["jurisdiction"])
                 if record.get("verdict_date"):
                     dedup_query = dedup_query.eq("verdict_date", record["verdict_date"])
-                dedup_result = await dedup_query.execute()
+                dedup_result = dedup_query.execute()
                 if dedup_result.data and len(dedup_result.data) > 0:
                     skipped += 1
                     continue
@@ -427,7 +430,7 @@ async def bulk_insert_verdicts(records: List[Dict]) -> Tuple[int, int, int]:
             if "confidence_score" not in record:
                 record["confidence_score"] = _estimate_confidence_from_source(record.get("source", "scraped"))
 
-            result = await db.table("settle_verdicts").insert(record).execute()
+            result = db.table("settle_verdicts").insert(record).execute()
             if result.data:
                 inserted += 1
             else:

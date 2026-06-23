@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from app.core.auth import require_admin
+from app.core.database import get_db
 from app.models.verdicts import (
     VerdictSearchFilter,
     VerdictSearchResponse,
@@ -76,6 +77,31 @@ async def get_verdict_stats(
 
 
 # ============================================================================
+# HEALTH CHECK  (declared BEFORE /{verdict_id} so the UUID route can't shadow it)
+# ============================================================================
+
+@router.get("/health")
+async def verdict_health_check():
+    """Internal verdict service health check."""
+    try:
+        db = await get_db()
+        if db is None:
+            return {
+                "status": "degraded",
+                "service": "internal-verdict-research",
+                "message": "no database (mock mode or unconfigured)",
+            }
+        result = db.table("settle_verdicts").select("id", count="exact").limit(1).execute()
+        return {
+            "status": "healthy",
+            "service": "internal-verdict-research",
+            "total_records": result.count or 0,
+        }
+    except Exception as e:
+        return {"status": "unhealthy", "service": "internal-verdict-research", "error": str(e)}
+
+
+# ============================================================================
 # CRUD OPERATIONS
 # ============================================================================
 
@@ -133,7 +159,7 @@ async def delete_verdict(
 
 @router.post("/scrape/bulk-insert")
 async def bulk_insert_verdicts(
-    records: list,
+    records: list[dict],
     admin=Depends(require_admin),
 ):
     """
@@ -171,9 +197,15 @@ async def create_scrape_job(
             "status": "running",
             "source_config": data.source_config,
         }
-        from app.core.database import supabase
-        result = await supabase.table("settle_verdict_scrape_jobs").insert(insert_data).execute()
+        db = await get_db()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not configured (mock mode); scrape-job tracking unavailable")
+        result = db.table("settle_verdict_scrape_jobs").insert(insert_data).execute()
+        if not result.data:
+            raise HTTPException(status_code=502, detail="Scrape job insert returned no data")
         return VerdictScrapeJobResponse(**result.data[0])
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Create scrape job error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create scrape job: {str(e)}")
@@ -206,8 +238,10 @@ async def update_scrape_job(
         if status in ("completed", "failed", "partial"):
             update_data["completed_at"] = datetime.utcnow().isoformat()
 
-        from app.core.database import supabase
-        result = await supabase.table("settle_verdict_scrape_jobs").update(update_data).eq("id", str(job_id)).execute()
+        db = await get_db()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not configured (mock mode); scrape-job tracking unavailable")
+        result = db.table("settle_verdict_scrape_jobs").update(update_data).eq("id", str(job_id)).execute()
         if not result.data:
             raise HTTPException(status_code=404, detail="Scrape job not found")
         return VerdictScrapeJobResponse(**result.data[0])
@@ -227,49 +261,29 @@ async def list_scrape_jobs(
 ):
     """List scraping jobs with optional filters."""
     try:
-        from app.core.database import supabase
-        query = supabase.table("settle_verdict_scrape_jobs").select("*").order("started_at", desc=True).limit(limit)
+        db = await get_db()
+        if db is None:
+            return ScrapeJobListResponse(jobs=[], total=0)
+        query = db.table("settle_verdict_scrape_jobs").select("*").order("started_at", desc=True).limit(limit)
 
         if source:
             query = query.eq("source", source)
         if status:
             query = query.eq("status", status)
 
-        result = await query.execute()
+        result = query.execute()
         jobs = [VerdictScrapeJobResponse(**row) for row in result.data or []]
 
         # Get total count
-        count_query = supabase.table("settle_verdict_scrape_jobs").select("id", count="exact")
+        count_query = db.table("settle_verdict_scrape_jobs").select("id", count="exact")
         if source:
             count_query = count_query.eq("source", source)
         if status:
             count_query = count_query.eq("status", status)
-        count_result = await count_query.execute()
+        count_result = count_query.execute()
 
         return ScrapeJobListResponse(jobs=jobs, total=count_result.count or 0)
     except Exception as e:
         logger.error(f"List scrape jobs error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to list scrape jobs: {str(e)}")
 
-
-# ============================================================================
-# HEALTH CHECK
-# ============================================================================
-
-@router.get("/health")
-async def verdict_health_check():
-    """Internal verdict service health check."""
-    try:
-        from app.core.database import supabase
-        result = await supabase.table("settle_verdicts").select("id", count="exact").limit(1).execute()
-        return {
-            "status": "healthy",
-            "service": "internal-verdict-research",
-            "total_records": result.count or 0,
-        }
-    except Exception as e:
-        return {
-            "status": "unhealthy",
-            "service": "internal-verdict-research",
-            "error": str(e),
-        }
