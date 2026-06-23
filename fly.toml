@@ -1,0 +1,24 @@
+app = 'truevow-settle'
+primary_region = 'iad'
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8002
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines = 0
+  max_machines = 1
+  idle_timeout_minutes = 33
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'
+
+[env]
+  ENVIRONMENT = 'production'
+  SETTLE_PILOT_MODE = 'false'
+  SETTLE_PILOT_GATE_FLOOR = '10'
+  SETTLE_PILOT_NARRATIVE_FLOOR = '5'
