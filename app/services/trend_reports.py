@@ -390,8 +390,11 @@ class TrendReportGenerator:
         """Generate jurisdiction coverage gap analysis."""
         db = await get_db()
 
-        result = await db.table("settle_contributions").select("jurisdiction").eq("status", "approved").execute()
-        rows = result.data or []
+        if db is None:
+            rows = []
+        else:
+            result = await db.table("settle_contributions").select("jurisdiction").eq("status", "approved").execute()
+            rows = result.data or []
 
         jurisdiction_counts: Dict[str, int] = {}
         for row in rows:
@@ -433,16 +436,18 @@ class TrendReportGenerator:
         """Generate Founding Member contribution highlights."""
         db = await get_db()
 
-        # Get founding members
-        fm_result = await db.table("settle_founding_members").select("*").execute()
-        fm_rows = fm_result.data or []
+        # Get founding members + their contributions
+        if db is None:
+            fm_rows = []
+            contrib_rows = []
+        else:
+            fm_result = await db.table("settle_founding_members").select("*").execute()
+            fm_rows = fm_result.data or []
+            contrib_result = await db.table("settle_contributions").select("contributor_user_id").eq("status", "approved").eq("founding_member", True).execute()
+            contrib_rows = contrib_result.data or []
 
         total_fm = len(fm_rows)
         active_fm = sum(1 for r in fm_rows if r.get("status") == "active")
-
-        # Get contributions by founding members
-        contrib_result = await db.table("settle_contributions").select("contributor_user_id").eq("status", "approved").eq("founding_member", True).execute()
-        contrib_rows = contrib_result.data or []
         total_contributions = len(contrib_rows)
 
         # Count per member

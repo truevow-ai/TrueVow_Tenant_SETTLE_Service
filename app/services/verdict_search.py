@@ -37,6 +37,19 @@ async def search_verdicts(filters: VerdictSearchFilter) -> VerdictSearchResponse
     start_time = time.time()
     db = await get_db()
 
+    if db is None:
+        return VerdictSearchResponse(
+            results=[],
+            total_count=0,
+            page=filters.page,
+            page_size=filters.page_size,
+            total_pages=0,
+            has_next=False,
+            has_prev=False,
+            search_filters={},
+            response_time_ms=int((time.time() - start_time) * 1000),
+        )
+
     query = db.table("settle_verdicts").select("*", count="exact")
 
     # Soft-delete filter (always applied)
@@ -213,6 +226,19 @@ async def search_verdicts(filters: VerdictSearchFilter) -> VerdictSearchResponse
 async def get_verdict_stats() -> VerdictStatsResponse:
     """Get aggregate statistics for internal dashboard."""
     db = await get_db()
+
+    if db is None:
+        return VerdictStatsResponse(
+            total_verdicts=0,
+            by_outcome_type={},
+            by_case_type={},
+            by_jurisdiction={},
+            by_review_status={},
+            by_source={},
+            avg_confidence_score=0.0,
+            avg_completeness_score=0.0,
+            date_range={"start": None, "end": None},
+        )
 
     # Total count
     total_result = await db.table("settle_verdicts").select("id", count="exact").is_("deleted_at", None).execute()

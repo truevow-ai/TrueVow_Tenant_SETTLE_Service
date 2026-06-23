@@ -81,6 +81,13 @@ async def get_carrier_patterns(
     """
     # Build base query
     db = await get_db()
+    if db is None:
+        return CarrierPatternsResponse(
+            patterns=[],
+            total_cases=0,
+            jurisdiction=jurisdiction,
+            case_type=case_type,
+        )
     query = (
         db.table("settle_contributions")
         .select("*")
