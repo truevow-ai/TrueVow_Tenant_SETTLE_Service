@@ -51,6 +51,13 @@ def main() -> int:
     check("non-PI -> amount None", e3.amount is None)
     check("years/citations not treated as money", not find_amounts("decided in 2008, 1 So. 3d 163, page 12"))
 
+    print("Synthetic — contract case w/ weak terms must NOT be PI (Hi-Shear regression):")
+    t4 = ("This breach of contract dispute involves a tort claim; the jury awarded damages "
+          "for $57,781 on the breach of the bolt contract.")
+    e4 = extract(t4)
+    check("weak-only contract case -> is_pi False", e4.is_pi is False)
+    check("weak-only contract case -> amount None", e4.amount is None)
+
     print("Real data — run over 5 so3d Florida cases (must abstain on non-PI, no fake $):")
     try:
         with Fetcher(min_delay=0.3) as f:

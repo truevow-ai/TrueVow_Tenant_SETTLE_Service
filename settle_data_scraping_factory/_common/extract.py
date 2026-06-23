@@ -19,17 +19,24 @@ from typing import Optional
 
 # --- Personal-injury / tort relevance ---------------------------------------
 
-PI_TERMS = [
+# Strong, unambiguous personal-injury / tort signals. At least one of these (or an
+# injury + a weak signal) is required to treat a case as PI.
+STRONG_PI_TERMS = [
     "personal injury", "negligence", "negligent", "bodily injury", "pain and suffering",
     "premises liability", "products liability", "product liability", "medical malpractice",
-    "wrongful death", "motor vehicle", "automobile accident", "car accident", "slip and fall",
-    "rear-end", "dog bite", "tort", "plaintiff was injured", "suffered injuries",
-    "damages for", "comparative negligence", "duty of care", "proximate cause",
+    "wrongful death", "motor vehicle accident", "automobile accident", "car accident",
+    "slip and fall", "rear-end collision", "dog bite", "plaintiff was injured",
+    "suffered injuries", "comparative negligence",
 ]
+# Weak/ambiguous signals — appear in many non-PI cases (e.g., contract disputes).
+# Never sufficient on their own.
+WEAK_PI_TERMS = ["tort", "damages for", "duty of care", "proximate cause"]
+
 # Strong negative signals (helps abstain on non-PI cases)
 NON_PI_TERMS = [
     "rule of criminal procedure", "habeas corpus", "death penalty", "post-conviction",
     "disbarment", "bar admission", "in re amendments", "tax assessment", "zoning",
+    "breach of contract", "promissory note", "breach of the", "uniform commercial code",
 ]
 
 INJURY_KEYWORDS = {
@@ -168,12 +175,19 @@ def extract(text: str) -> Extraction:
         return Extraction(is_pi=False, pi_score=0)
     low = text.lower()
 
-    pi_terms = _matches(low, PI_TERMS)
     non_pi = _matches(low, NON_PI_TERMS)
-    pi_score = len(pi_terms) - 2 * len(non_pi)
-    is_pi = pi_score >= 2  # require a couple of real PI signals
+    injuries_all = extract_injuries(low)
+    strong = _matches(low, STRONG_PI_TERMS)
+    weak = _matches(low, WEAK_PI_TERMS)
 
-    injuries = extract_injuries(low) if is_pi else []
+    # A case is PI only with a STRONG signal, OR an actual injury plus a weak signal.
+    # Weak terms alone (e.g., "tort", "damages for" in a contract case) never qualify.
+    strong_signal = bool(strong) or (bool(injuries_all) and bool(weak))
+    net = 2 * len(strong) + len(weak) + len(injuries_all) - 2 * len(non_pi)
+    is_pi = strong_signal and net >= 2
+
+    pi_terms = strong + weak
+    injuries = injuries_all if is_pi else []
     case_type = classify_case_type(low) if is_pi else None
 
     money = find_amounts(text) if is_pi else []
@@ -183,10 +197,10 @@ def extract(text: str) -> Extraction:
         priority = {"verdict": 3, "settlement": 3, "award": 2, "damages": 1, "unspecified": 0}
         best = sorted(money, key=lambda h: (priority.get(h.kind, 0), h.value), reverse=True)[0]
 
-    # Confidence: combine PI strength, presence of injuries, and a contextual amount.
+    # Confidence: driven primarily by STRONG signals, plus injuries and a contextual amount.
     conf = 0.0
     if is_pi:
-        conf = min(1.0, 0.3 + 0.1 * len(pi_terms))
+        conf = min(1.0, 0.25 + 0.12 * len(strong) + 0.05 * len(weak))
         if injuries:
             conf = min(1.0, conf + 0.15)
         if best and best.kind in ("verdict", "settlement", "award"):
@@ -194,7 +208,7 @@ def extract(text: str) -> Extraction:
 
     return Extraction(
         is_pi=is_pi,
-        pi_score=pi_score,
+        pi_score=net,
         pi_terms=pi_terms,
         case_type=case_type,
         injuries=injuries,
