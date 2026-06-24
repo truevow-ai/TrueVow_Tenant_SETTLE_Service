@@ -81,7 +81,7 @@ def build_candidate(rec: dict) -> dict:
         county = f"{m.group(1)} County, {('FL' if rec.get('jurisdiction')=='Florida' else 'CA')}"
 
     candidate = {
-        "source": "caselaw_access_project",
+        "source": rec.get("source", "caselaw_access_project"),
         "state": rec.get("jurisdiction"),
         "county_hint": county,
         "case_type": ex.case_type,
