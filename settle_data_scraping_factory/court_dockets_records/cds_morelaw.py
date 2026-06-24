@@ -81,15 +81,32 @@ def iter_listing(f: Fetcher, subject: str, max_pages: int = 3) -> list[dict]:
     return entries
 
 
+def _focus_narrative(full: str) -> str:
+    """Narrative after 'Description:' (drops nav/footer noise), guaranteeing the
+    structured result field (Outcome/Verdict/Settlement/Judgment/Award) stays in view.
+
+    MoreLaw states the result in a structured field, e.g.
+    "Outcome: Plaintiff's verdict for $76 million." On long write-ups that field can
+    fall past the 8000-char window — which would hide the clean, sourced dollar amount
+    from the shared extractor and wrongly route the case to needs_review. The appended
+    snippet is real page text, so this aids capture without fabricating anything.
+    """
+    idx = full.find("Description:")
+    body = full[idx + len("Description:"):] if idx >= 0 else full
+    text = body[:8000].strip()
+    om = re.search(r"(?:Outcome|Verdict|Settlement|Judgment|Award)\s*:\s*.{0,400}", body, re.IGNORECASE)
+    if om and om.group(0) not in text:
+        text = f"{text} {om.group(0)}".strip()
+    return text
+
+
 def fetch_detail(f: Fetcher, path: str) -> tuple[Optional[str], str, object]:
     res = f.get_text(MORELAW_BASE + path)
     soup = BeautifulSoup(res.text(), "lxml")
     heading_el = soup.find(["h1", "h2"])
     name = heading_el.get_text(strip=True) if heading_el else None
     full = re.sub(r"\s+", " ", soup.get_text(" ", strip=True))
-    # Focus on the case narrative after "Description:" (drops nav/footer noise).
-    idx = full.find("Description:")
-    text = full[idx + len("Description:"):][:8000].strip() if idx >= 0 else full[:8000]
+    text = _focus_narrative(full)
     return name, text, res
 
 
@@ -143,6 +160,18 @@ def selftest() -> int:
 
     from _common.extract import extract
     from cds_cap_pipeline import build_candidate
+
+    # Offline: the structured result field is recovered even when it falls past the
+    # 8000-char narrative window (prevents false 'needs_review' on long write-ups).
+    print("Outcome-field recovery (offline, long write-up):")
+    long_full = ("Description: " + ("plaintiff negligence motor vehicle accident injury " * 250)
+                 + " Outcome: Plaintiff's verdict for $2,500,000 in damages.")
+    focused = _focus_narrative(long_full)
+    naive = long_full[long_full.find("Description:") + len("Description:"):][:8000]
+    check("naive 8000-slice would drop the Outcome amount", extract(naive).amount is None)
+    check("focused narrative recovers the sourced Outcome amount", extract(focused).amount == 2_500_000)
+    check("recovered amount carries a real snippet (no fabrication)",
+          bool(extract(focused).amount_snippet) and "2,500,000" in extract(focused).amount_snippet)
 
     with Fetcher(min_delay=1.0) as f:
         recs = list(fetch_state_cases(f, ["Florida", "California"],
