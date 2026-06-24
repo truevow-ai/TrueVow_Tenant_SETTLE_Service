@@ -87,8 +87,9 @@ def map_candidate_to_verdict(c: dict) -> dict:
         "outcome_type": outcome_type or "unknown",
         "total_verdict": total_verdict,
         "settlement_amount": settlement_amount,
-        # verdict_date intentionally omitted: CAP is year-only; decision_year is in notes.
-        "source": "caselaw_access_project",
+        # verdict_date intentionally omitted: appellate sources are year-only; decision_year is in notes.
+        # source read from the candidate (courtlistener / morelaw / caselaw_access_project), never hardcoded.
+        "source": c.get("source") or "caselaw_access_project",
         "source_url": c.get("full_text_url") or c.get("source_url"),
         "source_notes": json.dumps({k: v for k, v in notes.items() if v is not None}, default=str),
         "review_status": review_status,
@@ -108,14 +109,20 @@ def _read_rows(path: Path) -> list[dict]:
     return rows
 
 
-def load_file(in_path: Path, dry_run: bool, source_label: str = "caselaw_access_project") -> dict:
+def load_file(in_path: Path, dry_run: bool, source_label: Optional[str] = None) -> dict:
     rows = _read_rows(in_path)
     records = [map_candidate_to_verdict(r) for r in rows]
+
+    # Job-tracking source label: honor an explicit override, else infer it from the rows
+    # so courtlistener/morelaw/CAP batches are tracked truthfully (never hardcoded).
+    if source_label is None:
+        sources = {r.get("source") for r in rows if r.get("source")}
+        source_label = sources.pop() if len(sources) == 1 else ("mixed" if sources else "caselaw_access_project")
 
     if dry_run:
         out = in_path.with_suffix(".verdicts.jsonl")
         out.write_text("\n".join(json.dumps(r, default=str) for r in records), encoding="utf-8")
-        return {"mode": "dry_run", "mapped": len(records), "payload_written": str(out)}
+        return {"mode": "dry_run", "mapped": len(records), "source_label": source_label, "payload_written": str(out)}
 
     headers = {"Authorization": f"Bearer {SETTLE_ADMIN_KEY}", "X-Admin-Key": SETTLE_ADMIN_KEY}
 
@@ -206,6 +213,12 @@ def selftest() -> int:
     check("notes carry year + snippet + sha256", notes.get("decision_year") == 2018 and notes.get("amount_snippet") and notes.get("text_sha256"))
     check("notes flag state-level + year-only", notes.get("jurisdiction_granularity") == "state" and notes.get("date_precision") == "year_only")
     check("confidence preserved", v["confidence_score"] == 0.85)
+    check("source read from candidate (not hardcoded)", v["source"] == "caselaw_access_project")
+
+    print("Source is read per-candidate (courtlistener):")
+    cl = dict(accepted, source="courtlistener", official_citation="courtlistener:1")
+    vcl = map_candidate_to_verdict(cl)
+    check("courtlistener source preserved", vcl["source"] == "courtlistener")
 
     print("Settlement routing + needs_review status:")
     s = dict(accepted, outcome_type="settlement", status="needs_review", reason="below_confidence_threshold")
@@ -222,6 +235,12 @@ def selftest() -> int:
         res = load_file(p, dry_run=True)
         check("dry-run mapped 1", res["mapped"] == 1)
         check("payload file written", Path(res["payload_written"]).exists())
+        check("inferred source_label = caselaw_access_project", res["source_label"] == "caselaw_access_project")
+
+        pcl = Path(tmp) / "cl.jsonl"
+        pcl.write_text(json.dumps(dict(accepted, source="courtlistener")) + "\n", encoding="utf-8")
+        rescl = load_file(pcl, dry_run=True)
+        check("inferred source_label = courtlistener", rescl["source_label"] == "courtlistener")
 
     if failures:
         print(f"\nRESULT: FAILED ({len(failures)}) -> {failures}")
