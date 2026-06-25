@@ -283,6 +283,7 @@ def run(
     filed_after: Optional[str] = None,
     filed_before: Optional[str] = None,
     out_dir: Optional[Path] = None,
+    min_delay: float = 2.0,
 ) -> dict:
     """Fetch -> route every record through the shared pipeline -> write buckets.
 
@@ -298,7 +299,7 @@ def run(
     seen_keys: set[str] = set()
     duplicates = 0
 
-    with Fetcher(min_delay=0.5) as f:
+    with Fetcher(min_delay=min_delay) as f:
         for rec in fetch_state_cases(f, states, query=query, max_cases=max_cases,
                                      filed_after=filed_after, filed_before=filed_before):
             cand = build_candidate(rec)
@@ -419,6 +420,8 @@ def main() -> int:
     ap.add_argument("--start-date", dest="filed_after", default=None, help="filed_after YYYY-MM-DD")
     ap.add_argument("--end-date", dest="filed_before", default=None, help="filed_before YYYY-MM-DD")
     ap.add_argument("--out-dir", default=None)
+    ap.add_argument("--min-delay", type=float, default=2.0,
+                    help="Seconds between CourtListener requests (raise to avoid 429 throttling)")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
@@ -431,6 +434,7 @@ def main() -> int:
         filed_after=args.filed_after,
         filed_before=args.filed_before,
         out_dir=Path(args.out_dir) if args.out_dir else None,
+        min_delay=args.min_delay,
     )
     print(json.dumps(summary, indent=2))
     print("\nNext: load accepted/needs_review into the review queue, e.g.")
