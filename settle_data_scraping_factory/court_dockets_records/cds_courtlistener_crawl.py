@@ -87,15 +87,62 @@ def _preseed_seen() -> set:
     return seen
 
 
-def _get_json_riding_throttle(f, url, params, headers, log, sleep_s, deadline):
-    """GET JSON, sleeping/retrying through throttles until it succeeds or the deadline."""
+def _get_riding(f, url, params, headers, log, sleep_s, deadline):
+    """GET a FetchResult, sleeping/retrying through throttles until success or the deadline.
+
+    Returns None only when the deadline is reached while still throttled (so the caller can
+    stop WITHOUT marking the in-flight opinion as seen). DRF does not count 429'd requests
+    against the quota, so probing during a throttle window is safe and clears naturally.
+    """
     while time.time() < deadline:
         try:
-            return f.get_json(url, params=params, headers=headers).json()
+            return f.get(url, params=params, headers=headers)
         except Exception as e:
             log.warning("throttled/error: %s -- sleeping %.0fs for the rolling window", str(e)[:90], sleep_s)
             time.sleep(sleep_s)
     return None
+
+
+def _fetch_record_riding(f, item, queried_court, headers, log, sleep_s, deadline):
+    """Fetch one opinion's detail (riding out throttles) and build a CAP-schema record.
+
+    Returns (status, rec):
+      ("ok", rec)        fetched + usable -> classify
+      ("skip", None)     fetched but unusable (non-FL / no text / no url) -> mark seen, skip
+      ("deadline", None) could NOT fetch before the deadline (throttled) -> do NOT mark seen
+    """
+    court_id = item.get("court_id") or queried_court
+    jurisdiction = cl.STATE_FROM_COURT.get(court_id)
+    op_id = cl._opinion_id(item)
+    if jurisdiction is None or not op_id:
+        return "skip", None
+    res = _get_riding(f, f"{cl.CL_API}/opinions/{op_id}/", None, headers, log, sleep_s, deadline)
+    if res is None:
+        return "deadline", None
+    try:
+        detail = res.json()
+    except Exception:
+        return "skip", None
+    text = cl._opinion_text_from_detail(detail)
+    if len(text) < 50:
+        return "skip", None
+    source_url = cl._abs_url(detail.get("absolute_url")) or cl._abs_url(item.get("absolute_url"))
+    if not source_url:
+        return "skip", None
+    rec = {
+        "source": "courtlistener",
+        "jurisdiction": jurisdiction,
+        "name_abbreviation": item.get("caseName") or item.get("case_name") or detail.get("caseName"),
+        "year": cl._year_from(item.get("dateFiled") or item.get("date_filed") or detail.get("date_created")),
+        "official_citation": cl._first_citation(item) or f"courtlistener:{op_id}",
+        "court_id": court_id,
+        "full_text_url": f"{cl.CL_API}/opinions/{op_id}/",
+        "source_url": source_url,
+        "text_sha256": res.sha256,
+        "fetched_at": res.fetched_at,
+        "opinion_text": text,
+    }
+    return "ok", rec
 
 
 def main() -> int:
@@ -131,7 +178,7 @@ def main() -> int:
     log.info("FL crawl start | courts=%s query=%r min_delay=%ss hours=%s preseeded_seen=%d",
              courts, args.query, args.min_delay, args.hours, len(seen))
 
-    with Fetcher(min_delay=args.min_delay) as f:
+    with Fetcher(min_delay=args.min_delay, max_retries=1) as f:
         for court in courts:
             if time.time() >= deadline or (args.max_opinions and processed >= args.max_opinions):
                 break
@@ -141,9 +188,10 @@ def main() -> int:
             while url and time.time() < deadline:
                 if args.max_opinions and processed >= args.max_opinions:
                     break
-                data = _get_json_riding_throttle(f, url, params, headers, log, args.throttle_sleep, deadline)
-                if not data:
+                res = _get_riding(f, url, params, headers, log, args.throttle_sleep, deadline)
+                if res is None:
                     break
+                data = res.json()
                 page += 1
                 results = data.get("results", [])
                 log.info("court=%s page=%d results=%d", court, page, len(results))
@@ -153,14 +201,13 @@ def main() -> int:
                     op_id = cl._opinion_id(item)
                     if not op_id or str(op_id) in seen:
                         continue
-                    seen.add(str(op_id))
-                    try:
-                        rec = cl.fetch_opinion_record(f, item, court, headers)
-                    except Exception as e:
-                        log.warning("detail %s error: %s -- sleeping %.0fs", op_id, str(e)[:80], args.throttle_sleep)
-                        time.sleep(args.throttle_sleep)
-                        continue
-                    if rec is None:
+                    status, rec = _fetch_record_riding(f, item, court, headers, log, args.throttle_sleep, deadline)
+                    if status == "deadline":
+                        break  # throttled past the deadline; DON'T mark seen -> retried next run
+                    seen.add(str(op_id))  # we fetched it (usable or not) -> never re-spend quota on it
+                    if status != "ok" or rec is None:
+                        ck.update(seen_ids=sorted(seen), last_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
+                        _save_ckpt(ck)
                         continue
                     cand = build_candidate(rec)
                     st = cand["status"]
