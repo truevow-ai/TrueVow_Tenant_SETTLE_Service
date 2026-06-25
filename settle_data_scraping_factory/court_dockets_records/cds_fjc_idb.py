@@ -25,11 +25,16 @@ IDB_BASE = "https://www.fjc.gov/sites/default/files/idb/textfiles"
 CIVIL_CUMULATIVE = "https://www.fjc.gov/sites/default/files/idb/textfiles/cv88on.zip"
 CRIMINAL_CUMULATIVE = "https://www.fjc.gov/sites/default/files/idb/textfiles/cr88on.zip"
 
+# Federal Nature-of-Suit (NOS) codes that are genuine *bodily-injury* personal injury.
+# Deliberately EXCLUDES non-PI matters the civil cover sheet groups nearby but that are
+# not personal-injury settlements — the false-positive analog to the criminal/enforcement
+# mislabeling fixed in _common/extract.py:
+#   320 (assault/libel/slander — defamation), 370 (other fraud), 371 (truth in lending),
+#   380 / 385 (property damage). Including those would mislabel non-PI cases as PI.
 NOS_PI_LABELS = {
     310: "Airplane PI",
     315: "Airplane product liability",
-    320: "Assault, libel, slander",
-    330: "Federal employers liability",
+    330: "Federal employers' liability (FELA)",
     340: "Marine PI",
     345: "Marine product liability",
     350: "Motor vehicle PI",
@@ -38,10 +43,6 @@ NOS_PI_LABELS = {
     362: "Medical malpractice",
     365: "Product liability",
     368: "Asbestos PI product liability",
-    370: "Other fraud",
-    371: "Truth in lending",
-    380: "Other personal property damage",
-    385: "Property damage product liability",
 }
 
 
@@ -80,9 +81,12 @@ def filter_pi(in_path: str, out_path: str, state: str = None):
         if header:
             writer.writerow(header)
 
+        # Locate the Nature-of-Suit column specifically. (Previously this matched the
+        # first of NOS/JURIS/DISTRICT — but real IDB files list DISTRICT before NOS, so it
+        # filtered on the wrong column and let non-PI cases through. Match "NOS" exactly.)
         nos_idx = None
         for i, col in enumerate(header or []):
-            if col.strip() in ("NOS", "JURIS", "DISTRICT"):
+            if col.strip().upper() == "NOS":
                 nos_idx = i
                 break
 
@@ -96,14 +100,65 @@ def filter_pi(in_path: str, out_path: str, state: str = None):
                     writer.writerow(row)
 
 
-def main():
+def selftest() -> int:
+    import tempfile
+
+    failures = []
+
+    def check(name, cond):
+        print(f"  [{'PASS' if cond else 'FAIL'}] {name}")
+        if not cond:
+            failures.append(name)
+
+    print("NOS-code precision (only bodily-injury PI; non-PI matters excluded):")
+    pi = set(NOS_PI_LABELS)
+    check("keeps motor vehicle PI (350)", 350 in pi)
+    check("keeps medical malpractice (362)", 362 in pi)
+    check("keeps product liability (365)", 365 in pi)
+    for code, label in [(320, "assault/libel/slander"), (370, "other fraud"),
+                        (371, "truth in lending"), (380, "property damage"),
+                        (385, "property damage product liability")]:
+        check(f"excludes non-PI NOS {code} ({label})", code not in pi)
+
+    print("filter_pi keeps only PI-NOS rows, using the NOS column (not DISTRICT/JURIS):")
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "idb.txt"
+        dst = Path(tmp) / "out.txt"
+        # DISTRICT deliberately placed BEFORE NOS to catch the old wrong-column bug.
+        rows = [
+            ["CASEID", "DISTRICT", "NOS", "JURIS"],
+            ["1", "350", "350", "FL"],   # NOS 350 motor vehicle PI -> keep
+            ["2", "370", "362", "CA"],   # NOS 362 med mal -> keep (DISTRICT 370 must be ignored)
+            ["3", "350", "370", "FL"],   # NOS 370 fraud -> drop (DISTRICT 350 must be ignored)
+            ["4", "999", "385", "CA"],   # NOS 385 property damage -> drop
+            ["5", "999", "899", "FL"],   # NOS 899 unrelated -> drop
+        ]
+        src.write_text("\n".join("\t".join(r) for r in rows), encoding="utf-8")
+        filter_pi(str(src), str(dst))
+        out = [l for l in dst.read_text(encoding="utf-8").splitlines() if l.strip()]
+        kept_nos = {l.split("\t")[2] for l in out[1:]}  # NOS column index 2
+        check("kept exactly the 2 PI rows (350, 362)", kept_nos == {"350", "362"})
+        check("did not filter on DISTRICT/JURIS column", "370" not in kept_nos and "385" not in kept_nos)
+
+    if failures:
+        print(f"\nRESULT: FAILED ({len(failures)}) -> {failures}")
+        return 1
+    print("\nRESULT: ALL CHECKS PASSED")
+    return 0
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description="FJC IDB PI case scraper")
     parser.add_argument("--year", type=int, help="Single year to download")
     parser.add_argument("--cumulative", action="store_true", help="Download cumulative files")
     parser.add_argument("--state", help="Filter by court state prefix")
     parser.add_argument("--output", "-o", default="fjc_pi_cases.csv", help="Output CSV path")
     parser.add_argument("--work-dir", default="fjc_data", help="Working directory for downloads")
+    parser.add_argument("--selftest", action="store_true", help="Run offline self-checks")
     args = parser.parse_args()
+
+    if args.selftest:
+        return selftest()
 
     work = Path(args.work_dir)
     work.mkdir(parents=True, exist_ok=True)
@@ -130,7 +185,8 @@ def main():
             print(f"Filtering PI cases from {txt_file} ...")
             filter_pi(str(txt_file), args.output, args.state)
             print(f"Output: {args.output}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
