@@ -100,6 +100,28 @@ def _focus_narrative(full: str) -> str:
     return text
 
 
+_CRIMINAL_CAPTION_RE = re.compile(
+    r"^\s*(united states(?:\s+of\s+america)?|the people|people of the state|commonwealth)\b.*\bv\.?",
+    re.IGNORECASE,
+)
+
+
+def _looks_criminal(name: Optional[str], text: str) -> bool:
+    """High-confidence criminal-prosecution write-up to skip (cuts review-queue noise).
+
+    The MoreLaw 'personal_injury' subject pages are polluted with criminal cases (e.g.
+    'United States of America v. ...' where the statute recites 'bodily injury'). We key
+    only on structural signals — the caption and the representation line at the START of
+    the write-up — to avoid false matches from the page's lawyer-directory footer (which
+    lists 'Criminal Defense' practices) that could wrongly skip a real PI case.
+    """
+    if name and _CRIMINAL_CAPTION_RE.search(name):
+        return True
+    head = text[:200].lower()
+    return ("criminal defense lawyer represented" in head
+            or "criminal defense attorney represented" in head)
+
+
 def fetch_detail(f: Fetcher, path: str) -> tuple[Optional[str], str, object]:
     res = f.get_text(MORELAW_BASE + path)
     soup = BeautifulSoup(res.text(), "lxml")
@@ -132,6 +154,10 @@ def fetch_state_cases(
             seen.add(entry["id"])
             name, text, res = fetch_detail(f, entry["path"])
             if not text:
+                continue
+            # Skip obvious criminal prosecutions that pollute the PI subject pages
+            # (the shared extractor also abstains on these — this is defense-in-depth).
+            if _looks_criminal(name, text):
                 continue
             count += 1
             yield {
@@ -172,6 +198,19 @@ def selftest() -> int:
     check("focused narrative recovers the sourced Outcome amount", extract(focused).amount == 2_500_000)
     check("recovered amount carries a real snippet (no fabrication)",
           bool(extract(focused).amount_snippet) and "2,500,000" in extract(focused).amount_snippet)
+
+    # Offline: criminal-prosecution filter keys on structure, not footer noise.
+    print("Criminal-caption filter (offline):")
+    check("US v. caption flagged criminal", _looks_criminal("United States of America v. Jane Doe", "x"))
+    check("People v. caption flagged criminal", _looks_criminal("The People v. John Roe", "x"))
+    check("criminal-defense framing flagged",
+          _looks_criminal("Doe v. Roe", "Tampa, Florida, criminal defense lawyer represented the Defendant charged with fraud."))
+    check("real PI write-up NOT flagged",
+          not _looks_criminal("Estate of Rivers v. Betancourt",
+                              "Tampa, Florida personal injury lawyers represented the Plaintiff who sued on auto negligence."))
+    check("footer 'Criminal Defense Lawyer Directory' does NOT trip the filter",
+          not _looks_criminal("Smith v. Jones",
+                              "Plaintiff suffered injuries in a crash. Find More Florida Criminal Defense Lawyer Directory"))
 
     with Fetcher(min_delay=1.0) as f:
         recs = list(fetch_state_cases(f, ["Florida", "California"],
