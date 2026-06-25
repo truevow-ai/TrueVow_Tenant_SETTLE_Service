@@ -176,6 +176,55 @@ def fetch_state_cases(
             }
 
 
+def run(
+    states: list[str],
+    subjects: Optional[list[str]] = None,
+    max_cases: int = 25,
+    max_pages: int = 3,
+    out_dir: Optional[Path] = None,
+) -> dict:
+    """Fetch -> route every record through the shared pipeline -> write buckets.
+
+    Output files mirror the CAP/CourtListener naming so cds_cap_loader consumes them
+    unchanged:  out/morelaw_<state>_<bucket>.jsonl
+    """
+    from cds_cap_pipeline import build_candidate
+
+    out_dir = out_dir or OUT_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    buckets = {"accepted": [], "needs_review": [], "rejected": []}
+    seen_keys: set[str] = set()
+    duplicates = 0
+
+    with Fetcher(min_delay=1.0) as f:
+        for rec in fetch_state_cases(f, states, subjects=subjects, max_cases=max_cases, max_pages=max_pages):
+            cand = build_candidate(rec)
+            if cand["status"] == "accepted":
+                if cand["dedup_key"] in seen_keys:
+                    duplicates += 1
+                    continue
+                seen_keys.add(cand["dedup_key"])
+            buckets[cand["status"]].append(cand)
+
+    label = "_".join(s.lower() for s in states) or "all"
+    for name, rows in buckets.items():
+        path = out_dir / f"morelaw_{label}_{name}.jsonl"
+        with path.open("w", encoding="utf-8") as fh:
+            for r in rows:
+                fh.write(json.dumps(r, default=str) + "\n")
+
+    return {
+        "source": "morelaw",
+        "states": states,
+        "candidates_seen": sum(len(v) for v in buckets.values()) + duplicates,
+        "accepted_usable": len(buckets["accepted"]),
+        "needs_review": len(buckets["needs_review"]),
+        "rejected": len(buckets["rejected"]),
+        "duplicates_dropped": duplicates,
+    }
+
+
 def selftest() -> int:
     failures = []
 
@@ -247,25 +296,23 @@ def selftest() -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="MoreLaw FL/CA verdict adapter")
+    ap = argparse.ArgumentParser(description="MoreLaw FL/CA verdict adapter (pipeline-routed)")
     ap.add_argument("--states", nargs="+", default=["Florida", "California"])
     ap.add_argument("--subjects", nargs="+", default=None)
     ap.add_argument("--max", type=int, default=25)
     ap.add_argument("--max-pages", type=int, default=3)
-    ap.add_argument("--out", default=None)
+    ap.add_argument("--out-dir", default=None)
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
         return selftest()
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = Path(args.out) if args.out else OUT_DIR / "morelaw_fl_ca.jsonl"
-    n = 0
-    with Fetcher(min_delay=1.0) as f, out_path.open("w", encoding="utf-8") as fh:
-        for rec in fetch_state_cases(f, args.states, subjects=args.subjects, max_cases=args.max, max_pages=args.max_pages):
-            fh.write(json.dumps(rec, default=str) + "\n")
-            n += 1
-    print(f"Wrote {n} MoreLaw records -> {out_path}")
+    summary = run(args.states, subjects=args.subjects, max_cases=args.max,
+                  max_pages=args.max_pages, out_dir=Path(args.out_dir) if args.out_dir else None)
+    print(json.dumps(summary, indent=2))
+    label = "_".join(s.lower() for s in args.states) or "all"
+    print("\nNext: load accepted/needs_review into the review queue, e.g.")
+    print(f"  python cds_cap_loader.py --in out/morelaw_{label}_accepted.jsonl --dry-run")
     return 0
 
 
