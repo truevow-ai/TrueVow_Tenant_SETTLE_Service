@@ -58,6 +58,31 @@ def main() -> int:
     check("weak-only contract case -> is_pi False", e4.is_pi is False)
     check("weak-only contract case -> amount None", e4.amount is None)
 
+    print("Synthetic — criminal prosecution reciting tort words must NOT be PI:")
+    t5 = ("A criminal defense lawyer represented the defendant charged with tampering with "
+          "consumer products with reckless disregard for the risk of death or bodily injury "
+          "to another person; personal injury could result. He replaced morphine with saline.")
+    e5 = extract(t5)
+    check("criminal-statute 'bodily injury' -> is_pi False", e5.is_pi is False)
+    check("criminal case -> amount None", e5.amount is None)
+
+    print("Synthetic — regulatory/enforcement charge labels must NOT be PI:")
+    t6 = ("The State sued the defendants on counts of deceptive and unfair trade practices, "
+          "negligence, violating product liability laws, and fraudulent misrepresentation. "
+          "The filing of a civil case is not proof of fault.")
+    e6 = extract(t6)
+    check("enforcement charge labels -> is_pi False", e6.is_pi is False)
+    check("enforcement case -> amount None", e6.amount is None)
+
+    print("Synthetic — DUI/criminal-adjacent PI with real injury must STAY PI (recall guard):")
+    t7 = ("The defendant was charged with DUI after the motor vehicle accident. The plaintiff "
+          "suffered a fractured leg and cervical spine injuries due to the defendant's "
+          "negligence; the jury awarded $900,000.")
+    e7 = extract(t7)
+    check("criminal-adjacent PI with injury -> is_pi True", e7.is_pi is True)
+    check("amount still captured == 900,000", e7.amount == 900_000)
+    check("case_type motor_vehicle_accident", e7.case_type == "motor_vehicle_accident")
+
     print("Real data — run over 5 so3d Florida cases (must abstain on non-PI, no fake $):")
     try:
         with Fetcher(min_delay=0.3) as f:

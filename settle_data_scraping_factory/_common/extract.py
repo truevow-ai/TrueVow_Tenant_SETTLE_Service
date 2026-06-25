@@ -37,6 +37,18 @@ NON_PI_TERMS = [
     "rule of criminal procedure", "habeas corpus", "death penalty", "post-conviction",
     "disbarment", "bar admission", "in re amendments", "tax assessment", "zoning",
     "breach of contract", "promissory note", "breach of the", "uniform commercial code",
+    # Enforcement / fraud / regulatory subject-matter — not personal-injury torts.
+    "deceptive and unfair trade", "unfair trade practices", "fraudulent misrepresentation",
+    "securities fraud", "wire fraud", "mail fraud", "money laundering",
+]
+
+# Criminal-prosecution markers. Tort *language* (a statute reciting "bodily injury", or a
+# charge labeled "negligence") in a criminal/enforcement matter is NOT a PI tort. Used as a
+# precision guard: criminal markers + no concrete injury + no PI case type -> abstain.
+CRIMINAL_TERMS = [
+    "criminal defense lawyer", "criminal defense attorney", "charged with", "grand jury",
+    "indictment", "indicted", "pleaded guilty", "pleaded no contest", "plea agreement",
+    "criminal complaint",
 ]
 
 INJURY_KEYWORDS = {
@@ -176,9 +188,11 @@ def extract(text: str) -> Extraction:
     low = text.lower()
 
     non_pi = _matches(low, NON_PI_TERMS)
+    criminal = _matches(low, CRIMINAL_TERMS)
     injuries_all = extract_injuries(low)
     strong = _matches(low, STRONG_PI_TERMS)
     weak = _matches(low, WEAK_PI_TERMS)
+    ct = classify_case_type(low)
 
     # A case is PI only with a STRONG signal, OR an actual injury plus a weak signal.
     # Weak terms alone (e.g., "tort", "damages for" in a contract case) never qualify.
@@ -186,9 +200,17 @@ def extract(text: str) -> Extraction:
     net = 2 * len(strong) + len(weak) + len(injuries_all) - 2 * len(non_pi)
     is_pi = strong_signal and net >= 2
 
+    # Criminal-prosecution precision guard: when criminal markers are present and the case
+    # has neither a concrete injury nor a concrete PI case type, the tort words are charge
+    # labels / statutory language ("bodily injury" in a tampering statute), not a personal
+    # injury claim -> abstain. Real PI cases keep an injury or a PI case type, so a
+    # DUI/criminal-adjacent PI suit is unaffected.
+    if criminal and not injuries_all and ct is None:
+        is_pi = False
+
     pi_terms = strong + weak
     injuries = injuries_all if is_pi else []
-    case_type = classify_case_type(low) if is_pi else None
+    case_type = ct if is_pi else None
 
     money = find_amounts(text) if is_pi else []
     # Choose the outcome amount: prefer verdict > settlement > award > damages, then largest.
