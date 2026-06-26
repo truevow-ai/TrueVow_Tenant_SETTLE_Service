@@ -34,7 +34,20 @@ from _common.extract import extract  # noqa: E402
 from cds_cap_fetcher import fetch_reporter  # noqa: E402
 from _common.fetcher import Fetcher  # noqa: E402
 
-TARGET_STATES = {"Florida", "California"}
+# A case must be from a real US state jurisdiction (the per-source crawlers/adapters choose
+# WHICH states they fetch; this gate just rejects non-state jurisdictions like "Regional",
+# federal-only courts, or empty values). Widened from {FL, CA} so the multi-state CAP
+# crawler fleet classifies every targeted state instead of rejecting it as off-target.
+TARGET_STATES = {
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut",
+    "Delaware", "District of Columbia", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois",
+    "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts",
+    "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada",
+    "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota",
+    "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina",
+    "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
+    "West Virginia", "Wisconsin", "Wyoming",
+}
 ACCEPT_CONFIDENCE = 0.6
 OUT_DIR = Path(__file__).parent / "out"
 
