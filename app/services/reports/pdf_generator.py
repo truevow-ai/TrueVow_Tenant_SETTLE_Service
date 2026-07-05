@@ -30,11 +30,13 @@ class PDFGenerator:
         """Initialize PDF generator."""
         self.enabled = True
         try:
-            # Test if WeasyPrint is available
             from weasyprint import HTML
             self.weasyprint_available = True
-        except ImportError:
-            logger.warning("WeasyPrint not installed. PDF generation will be mocked.")
+        except (ImportError, OSError) as exc:
+            logger.warning(
+                "WeasyPrint not available (%s). PDF generation will be mocked.",
+                str(exc)[:120],
+            )
             self.weasyprint_available = False
             self.enabled = False
     
@@ -720,7 +722,21 @@ startxref
         return mock_content
 
 
-# Global PDF generator instance
-pdf_generator = PDFGenerator()
+# Global PDF generator instance (lazy-init to avoid crashing the app on
+# platforms where GTK/Pango system libs are missing, e.g. plain Windows).
+pdf_generator: PDFGenerator | None = None
+
+
+def get_pdf_generator() -> PDFGenerator:
+    global pdf_generator
+    if pdf_generator is None:
+        try:
+            pdf_generator = PDFGenerator()
+        except Exception as exc:
+            logger.warning("PDFGenerator init failed (%s). Disabling PDF.", str(exc)[:120])
+            pdf_generator = PDFGenerator.__new__(PDFGenerator)
+            pdf_generator.enabled = False
+            pdf_generator.weasyprint_available = False
+    return pdf_generator
 
 

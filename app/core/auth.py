@@ -170,7 +170,7 @@ class APIKeyAuth:
         """
         
         # In mock mode, accept any key
-        if settings.USE_MOCK_DATA:
+        if settings.use_mock_data:
             logger.info("Mock mode: accepting any API key")
             return {
                 "user_id": "mock_user_123",
@@ -274,7 +274,7 @@ async def get_admin_api_key(
     """
     
     # In mock mode, allow all
-    if settings.USE_MOCK_DATA:
+    if settings.use_mock_data:
         logger.info("Mock mode: granting admin access")
         return {
             "user_id": "admin_user",
@@ -307,7 +307,7 @@ async def get_founding_member_api_key(
     """
     
     # In mock mode, allow all
-    if settings.USE_MOCK_DATA:
+    if settings.use_mock_data:
         logger.info("Mock mode: granting Founding Member access")
         return {
             "user_id": "founding_member_user",

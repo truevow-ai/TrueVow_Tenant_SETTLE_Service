@@ -12,7 +12,7 @@ from app.models.reports import ReportRequest, ReportResponse, ReportSummary
 from app.models.case_bank import EstimateRequest
 from app.services.estimator import SettlementEstimator
 from app.services.contributor import ContributionService
-from app.services.reports.pdf_generator import PDFGenerator
+from app.services.reports.pdf_generator import get_pdf_generator
 from app.core.auth import require_any_auth
 from app.core.database import get_db
 
@@ -147,7 +147,7 @@ async def generate_report(
                 logger.warning(f"Failed to persist report record: {e}")
         
         if request.format == "pdf":
-            pdf_gen = PDFGenerator()
+            pdf_gen = get_pdf_generator()
             query_dict = query_data or {
                 "jurisdiction": "Unknown",
                 "case_type": "Unknown",

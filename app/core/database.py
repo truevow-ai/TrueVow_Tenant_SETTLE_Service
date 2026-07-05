@@ -524,7 +524,7 @@ async def get_db_with_retry(retries: int = 3) -> Optional[Any]:
         Supabase client or None
     """
     # In mock mode, skip retries entirely
-    if settings.USE_MOCK_DATA:
+    if settings.use_mock_data:
         return await get_db()
     
     for attempt in range(retries):

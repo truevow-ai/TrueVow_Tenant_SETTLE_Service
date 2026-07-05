@@ -157,7 +157,7 @@ class ServiceAuth:
         
         # Verify API key (in production, this would check database)
         # For now, we'll accept any properly formatted key in development
-        if settings.USE_MOCK_DATA:
+        if settings.use_mock_data:
             logger.info(f"Mock mode: accepting service request from {x_service_name}")
         else:
             # TODO: Implement actual API key verification
