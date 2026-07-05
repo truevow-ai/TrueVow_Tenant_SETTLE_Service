@@ -19,7 +19,6 @@ from app.services.carrier_patterns import (
 )
 from app.models.verdicts import (
     VerdictSearchFilter,
-    VerdictSearchResponse,
     VerdictStatsResponse,
 )
 

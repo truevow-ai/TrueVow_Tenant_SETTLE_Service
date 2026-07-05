@@ -242,7 +242,8 @@ def selftest() -> int:
     check("no fabricated amount", c3["exact_outcome_amount"] is None)
 
     print("Missing provenance -> rejected:")
-    bad = dict(base, opinion_text=pi["opinion_text"]); bad["full_text_url"] = None
+    bad = dict(base, opinion_text=pi["opinion_text"])
+    bad["full_text_url"] = None
     c4 = build_candidate(bad)
     check("status rejected (missing provenance)", c4["status"] == "rejected" and c4["reason"] == "missing_provenance")
 

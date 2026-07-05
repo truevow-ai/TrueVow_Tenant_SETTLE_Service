@@ -21,8 +21,7 @@ from uuid import UUID, uuid4
 
 from app.models.case_bank import (
     ContributionRequest,
-    ContributionResponse,
-    SettleContribution
+    ContributionResponse
 )
 from app.services.validator import DataValidator
 from app.services.anonymizer import AnonymizationValidator

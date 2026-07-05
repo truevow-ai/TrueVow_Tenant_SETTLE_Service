@@ -11,7 +11,6 @@ Usage:
 import pytest
 import httpx
 import os
-from typing import Optional
 
 BACKEND_URL = os.environ.get("SETTLE_BACKEND_URL", "http://localhost:8002")
 API_KEY = os.environ.get("SETTLE_API_KEY", "test-admin-key")

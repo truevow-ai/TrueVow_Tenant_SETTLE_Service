@@ -5,7 +5,7 @@ Tests for Phase 3.3: Override Tracking
 import pytest
 from datetime import datetime, UTC
 from uuid import uuid4
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from app.services.override_tracking import (
     OverrideTrackingService,

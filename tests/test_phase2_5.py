@@ -4,7 +4,7 @@ Tests for Phase 2.5: Trend Studies / Market Reports
 
 import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from app.services.trend_reports import (
     TrendReportGenerator,

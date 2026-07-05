@@ -20,7 +20,7 @@ snapshot).
 """
 from __future__ import annotations
 
-from app.services.injury_classifier.schema import InjuryTag, ReviewTrigger
+from app.services.injury_classifier.schema import InjuryTag
 
 
 CANONICAL_VERDICTS: list[dict] = [

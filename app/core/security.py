@@ -7,7 +7,6 @@ API key authentication and authorization for SETTLE service.
 import hashlib
 import secrets
 from typing import Optional, Tuple
-from uuid import UUID
 from fastapi import HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 import logging

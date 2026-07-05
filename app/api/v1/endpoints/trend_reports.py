@@ -6,9 +6,8 @@ and Founding Member highlights. Public (authenticated) endpoints.
 """
 
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import require_any_auth
 from app.services import trend_reports as trend_service

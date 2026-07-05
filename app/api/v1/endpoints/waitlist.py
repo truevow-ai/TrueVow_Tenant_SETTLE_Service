@@ -6,7 +6,7 @@ Public and admin endpoints for SETTLE waitlist management.
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List, Dict
+from typing import Optional, List
 from uuid import uuid4
 from datetime import datetime, UTC
 import logging

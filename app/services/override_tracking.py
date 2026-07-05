@@ -7,7 +7,7 @@ Used for learning from overrides and improving estimates over time.
 
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime, UTC
+from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, Field
 

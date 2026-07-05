@@ -3,9 +3,7 @@ Automated Integration Tests for SETTLE Service
 Tests all customer scenarios end-to-end
 """
 
-import pytest
 import requests
-import json
 import time
 from datetime import datetime
 from typing import Dict, List, Optional

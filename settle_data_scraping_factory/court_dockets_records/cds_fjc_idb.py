@@ -14,7 +14,6 @@ Usage:
 
 import argparse
 import csv
-import json
 import sys
 from pathlib import Path
 from zipfile import ZipFile
@@ -135,8 +134,8 @@ def selftest() -> int:
         ]
         src.write_text("\n".join("\t".join(r) for r in rows), encoding="utf-8")
         filter_pi(str(src), str(dst))
-        out = [l for l in dst.read_text(encoding="utf-8").splitlines() if l.strip()]
-        kept_nos = {l.split("\t")[2] for l in out[1:]}  # NOS column index 2
+        out = [line for line in dst.read_text(encoding="utf-8").splitlines() if line.strip()]
+        kept_nos = {line.split("\t")[2] for line in out[1:]}  # NOS column index 2
         check("kept exactly the 2 PI rows (350, 362)", kept_nos == {"350", "362"})
         check("did not filter on DISTRICT/JURIS column", "370" not in kept_nos and "385" not in kept_nos)
 

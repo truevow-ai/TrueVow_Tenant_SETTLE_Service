@@ -6,12 +6,9 @@ Handles API key validation and access level enforcement for SETTLE endpoints.
 
 import logging
 from typing import List, Optional
-from uuid import UUID
 from fastapi import Header, HTTPException, status
-from datetime import datetime
 
 from app.core.config import settings
-from app.core.security import verify_api_key
 
 logger = logging.getLogger(__name__)
 

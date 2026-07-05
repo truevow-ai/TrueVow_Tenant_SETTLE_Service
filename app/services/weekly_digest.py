@@ -13,7 +13,7 @@ Extends existing email_service.py with digest template.
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta, UTC
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.core.database import get_db
 

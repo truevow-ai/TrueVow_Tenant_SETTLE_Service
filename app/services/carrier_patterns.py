@@ -12,7 +12,7 @@ industry sub-category.
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db

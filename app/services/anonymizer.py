@@ -9,7 +9,7 @@ Reference: Part 7, Section 7.3 (Anonymization Logic) and 7.6 (Legal & Compliance
 
 import re
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 

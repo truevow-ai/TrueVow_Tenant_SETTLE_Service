@@ -6,8 +6,7 @@ Works in tandem with AnonymizationValidator to ensure data quality.
 """
 
 import logging
-from typing import Dict, List, Tuple, Optional
-from datetime import datetime
+from typing import List, Tuple, Optional
 
 from app.models.case_bank import (
     ContributionRequest,

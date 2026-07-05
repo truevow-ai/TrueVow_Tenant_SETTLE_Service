@@ -16,7 +16,6 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from app.core.database import get_db
 
 logger = logging.getLogger(__name__)
 

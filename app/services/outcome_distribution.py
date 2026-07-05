@@ -15,7 +15,7 @@ Bar compliance: All language is descriptive, not predictive.
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
@@ -158,7 +158,7 @@ class OutcomeDistributionAnalyzer:
             len(rows) for outcome, rows in mapped_groups.items()
             if "verdict" in outcome.lower()
         )
-        settlement_count = sum(
+        _settlement_count = sum(
             len(rows) for outcome, rows in mapped_groups.items()
             if "settlement" in outcome.lower()
         )

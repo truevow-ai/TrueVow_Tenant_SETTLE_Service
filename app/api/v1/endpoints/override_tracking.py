@@ -7,7 +7,6 @@ Admin-only endpoint for analytics.
 
 import logging
 from typing import Optional
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 

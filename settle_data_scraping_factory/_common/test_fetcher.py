@@ -8,7 +8,6 @@ Hits a real zero-blocker endpoint (Caselaw Access Project metadata).
 
 import sys
 import tempfile
-from pathlib import Path
 
 # fetcher.py lives in the same directory as this script.
 from fetcher import Fetcher

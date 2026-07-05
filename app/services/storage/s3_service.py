@@ -8,7 +8,6 @@ import logging
 from typing import Optional
 from datetime import datetime, timedelta
 import os
-import io
 
 logger = logging.getLogger(__name__)
 

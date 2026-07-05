@@ -17,7 +17,7 @@ multi-factor score returned with every estimate.
 
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime, UTC, timedelta
+from datetime import datetime, UTC
 
 from pydantic import BaseModel, Field
 

@@ -2,7 +2,6 @@
 Unit tests for Anonymization Validator Service
 """
 
-import pytest
 
 from app.services.anonymizer import AnonymizationValidator
 

@@ -10,7 +10,6 @@ import asyncio
 from typing import Optional, Any, Dict, List
 from contextlib import asynccontextmanager
 from functools import wraps
-import json
 
 import httpx
 
@@ -574,7 +573,7 @@ async def health_check() -> dict:
             }
         
         # Simple query to verify connection
-        result = db.table("settle_contributions").select("id").limit(1).execute()
+        _result = db.table("settle_contributions").select("id").limit(1).execute()
         
         return {
             "status": "healthy",

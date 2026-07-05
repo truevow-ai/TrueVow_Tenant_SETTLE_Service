@@ -1,5 +1,5 @@
 """
-TrueVow Shared Sentry SDK — Python (FastAPI)
+TrueVow Shared Sentry SDK ï¿½ Python (FastAPI)
 Drop-in error tracking and performance monitoring for all Python services.
 
 Usage:
@@ -31,7 +31,7 @@ def init_sentry(app=None, dsn: str = None, environment: str = None, traces_sampl
     """
     sentry_dsn = dsn or os.getenv("SENTRY_DSN")
     if not sentry_dsn:
-        print("[Sentry] WARNING: SENTRY_DSN not set — error tracking disabled")
+        print("[Sentry] WARNING: SENTRY_DSN not set ï¿½ error tracking disabled")
         return False
 
     sentry_env = environment or os.getenv("SENTRY_ENVIRONMENT", os.getenv("ENV", "development"))
@@ -58,7 +58,7 @@ def init_sentry(app=None, dsn: str = None, environment: str = None, traces_sampl
                 response = await call_next(request)
                 return response
 
-    print(f"[Sentry] Initialized — env={sentry_env}, traces={traces_sample_rate}")
+    print(f"[Sentry] Initialized ï¿½ env={sentry_env}, traces={traces_sample_rate}")
     return True
 
 

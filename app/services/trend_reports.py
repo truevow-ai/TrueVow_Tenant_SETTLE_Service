@@ -447,7 +447,7 @@ class TrendReportGenerator:
             contrib_rows = contrib_result.data or []
 
         total_fm = len(fm_rows)
-        active_fm = sum(1 for r in fm_rows if r.get("status") == "active")
+        _active_fm = sum(1 for r in fm_rows if r.get("status") == "active")
         total_contributions = len(contrib_rows)
 
         # Count per member

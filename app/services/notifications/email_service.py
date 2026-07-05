@@ -3,9 +3,8 @@ Email Notification Service using Resend API
 """
 
 import logging
-from typing import Optional, Dict
+from typing import Optional
 import httpx
-from datetime import datetime, UTC
 
 from app.core.config import settings
 

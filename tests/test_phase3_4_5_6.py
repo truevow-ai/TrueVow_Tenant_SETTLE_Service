@@ -5,8 +5,7 @@ Tests for Phase 3.6: Firm-Wide Yield Analytics
 """
 
 import pytest
-from datetime import datetime, UTC
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from app.services.weekly_digest import WeeklyDigestGenerator, DigestContent
 
@@ -68,7 +67,6 @@ class TestRecencyWeighting:
 
     def test_recency_weight_last_6_months(self):
         """Test 1.5x weight for last 6 months."""
-        from app.services.estimator import SettlementEstimator
         # The recency weight function should return 1.5 for <180 days
         # This is tested via the estimator integration
         pass

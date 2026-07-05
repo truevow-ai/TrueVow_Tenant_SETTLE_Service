@@ -3,7 +3,6 @@ Query Endpoints - Settlement Range Estimation
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Request
-from typing import Optional
 import logging
 
 from app.models.case_bank import EstimateRequest, EstimateResponse

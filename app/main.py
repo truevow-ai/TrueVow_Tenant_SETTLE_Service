@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("SETTLE Service starting up...")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
-    logger.info(f"API Documentation: http://localhost:8002/docs")
+    logger.info("API Documentation: http://localhost:8002/docs")
     yield
     # Shutdown
     logger.info("SETTLE Service shutting down...")

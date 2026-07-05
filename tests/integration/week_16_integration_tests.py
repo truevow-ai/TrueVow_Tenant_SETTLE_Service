@@ -14,7 +14,6 @@ import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
 from uuid import uuid4
 
 # Add parent directory to path

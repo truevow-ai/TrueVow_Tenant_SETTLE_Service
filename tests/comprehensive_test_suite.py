@@ -11,9 +11,7 @@ Tests every possible edge case and use case:
 """
 
 import pytest
-import asyncio
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import datetime, UTC
 from uuid import uuid4
 
@@ -24,7 +22,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from app.main import app
 from app.core.config import settings
-from app.core.service_auth import ServiceAuth, ServiceClient
 from app.services.integrations.platform import PlatformServiceClient
 from app.services.integrations.internal_ops import InternalOpsServiceClient
 

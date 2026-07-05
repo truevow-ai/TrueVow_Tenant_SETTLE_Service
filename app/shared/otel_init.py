@@ -1,5 +1,5 @@
 """
-TrueVow Shared Observability SDK — OpenTelemetry
+TrueVow Shared Observability SDK ï¿½ OpenTelemetry
 Drop-in instrumentation for ALL Python services.
 Sends traces + metrics to SigNoz, errors to Sentry.
 One interface. All services.
@@ -62,7 +62,7 @@ def init_observability(
             otlp_exporter = OTLPSpanExporter(endpoint=otlp, insecure=True)
             provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
         except Exception as e:
-            logger.warning(f"[OTEL] Trace exporter unavailable ({e}) — traces disabled")
+            logger.warning(f"[OTEL] Trace exporter unavailable ({e}) ï¿½ traces disabled")
         trace.set_tracer_provider(provider)
 
     # --- Metrics ---
@@ -75,7 +75,7 @@ def init_observability(
             meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
             metrics.set_meter_provider(meter_provider)
         except Exception as e:
-            logger.warning(f"[OTEL] Metric exporter unavailable ({e}) — metrics disabled")
+            logger.warning(f"[OTEL] Metric exporter unavailable ({e}) ï¿½ metrics disabled")
 
     # --- Auto-instrumentation ---
     if app and enable_traces:

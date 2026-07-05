@@ -87,7 +87,6 @@ def main() -> int:
     try:
         with Fetcher(min_delay=0.3) as f:
             # reuse Piece 3's fetcher logic inline (metadata -> first FL cases -> text)
-            import json as _json
             vols = f.get_json("https://static.case.law/so3d/VolumesMetadata.json").json()
             vol = vols[0]["volume_folder"]
             metas = f.get_json(f"https://static.case.law/so3d/{vol}/CasesMetadata.json").json()

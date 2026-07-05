@@ -19,10 +19,10 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, UTC
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.core.database import get_db
 

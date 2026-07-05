@@ -4,9 +4,8 @@ Stats Endpoints
 Public statistics and metrics about the SETTLE service.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import Optional
 import logging
 
 from app.core.config import settings

@@ -3,7 +3,7 @@ Tests for Phase 3.2: Overdemand Cliff Detection
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from app.services.overdemand_cliff import (
     OverdemandCliffDetector,

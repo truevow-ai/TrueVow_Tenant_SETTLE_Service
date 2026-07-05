@@ -3,14 +3,11 @@ Report Generation Endpoints
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Response
-from typing import Optional
 from uuid import uuid4
 from datetime import datetime, UTC
 import logging
 
-from app.models.reports import ReportRequest, ReportResponse, ReportSummary
-from app.models.case_bank import EstimateRequest
-from app.services.estimator import SettlementEstimator
+from app.models.reports import ReportRequest, ReportResponse
 from app.services.contributor import ContributionService
 from app.services.reports.pdf_generator import get_pdf_generator
 from app.core.auth import require_any_auth

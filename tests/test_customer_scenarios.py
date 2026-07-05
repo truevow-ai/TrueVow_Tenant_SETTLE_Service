@@ -6,9 +6,9 @@ Tests all possible user journeys, billing, limits, and edge cases
 import requests
 import json
 import time
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
-from dataclasses import dataclass, asdict
+from datetime import datetime
+from typing import Dict, List
+from dataclasses import dataclass
 
 BASE_URL = "http://localhost:8002"
 API_VERSION = "v1"

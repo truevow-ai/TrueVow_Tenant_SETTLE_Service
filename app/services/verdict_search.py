@@ -6,8 +6,8 @@ NOT customer-facing.
 
 import time
 import logging
-from typing import List, Dict, Any, Optional, Tuple
-from datetime import date, datetime
+from typing import List, Dict, Optional, Tuple
+from datetime import datetime
 from uuid import UUID
 
 from app.core.database import get_db

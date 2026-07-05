@@ -1,7 +1,6 @@
 """Tests for the deterministic review-trigger evaluator."""
 from __future__ import annotations
 
-import pytest
 
 from app.services.injury_classifier.schema import InjuryTag, ReviewTrigger
 from app.services.injury_classifier.triggers import evaluate_triggers

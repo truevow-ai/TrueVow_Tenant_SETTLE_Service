@@ -5,9 +5,8 @@ Generates professional 4-page PDF reports for settlement analysis using WeasyPri
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from datetime import datetime
-import os
 import io
 import qrcode
 import base64
@@ -29,14 +28,11 @@ class PDFGenerator:
     def __init__(self):
         """Initialize PDF generator."""
         self.enabled = True
-        try:
-            from weasyprint import HTML
+        import importlib.util
+        if importlib.util.find_spec("weasyprint") is not None:
             self.weasyprint_available = True
-        except (ImportError, OSError) as exc:
-            logger.warning(
-                "WeasyPrint not available (%s). PDF generation will be mocked.",
-                str(exc)[:120],
-            )
+        else:
+            logger.warning("WeasyPrint not installed. PDF generation will be mocked.")
             self.weasyprint_available = False
             self.enabled = False
     
@@ -76,7 +72,7 @@ class PDFGenerator:
             )
             
             # Convert HTML to PDF
-            from weasyprint import HTML, CSS
+            from weasyprint import HTML
             pdf_bytes = HTML(string=html_content).write_pdf()
             
             logger.info(f"PDF generated successfully: {len(pdf_bytes)} bytes")

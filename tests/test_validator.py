@@ -2,7 +2,6 @@
 Unit tests for Data Validator Service
 """
 
-import pytest
 
 from app.services.validator import DataValidator
 from app.models.case_bank import ContributionRequest
