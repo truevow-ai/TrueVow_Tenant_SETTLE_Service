@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "architect",
+  "skills": {
+    "paths": [".opencode/skills"]
+  },
+  "instructions": ["AGENTS.md"],
+  "agent": {
+    "architect": {
+      "description": "Plans first, validates against architecture, creates implementation specs before any code is written",
+      "mode": "primary",
+      "permission": {
+        "edit": "ask",
+        "bash": "ask"
+      }
+    },
+    "coder": {
+      "description": "Implements planned tasks following established patterns and conventions",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "bash": {
+          "python -m pytest *": "allow",
+          "npm run *": "allow",
+          "npx *": "allow",
+          "git *": "ask",
+          "*": "ask"
+        }
+      }
+    },
+    "qa": {
+      "description": "Runs truth commands, verifies tests and builds, commits when green",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "bash": {
+          "python -m pytest": "allow",
+          "ruff check *": "allow",
+          "mypy *": "allow",
+          "npm run lint": "allow",
+          "npm run build": "allow",
+          "git *": "allow",
+          "*": "ask"
+        }
+      }
+    }
+  },
+  "command": {
+    "truth": {
+      "description": "Run truth commands (backend tests + lint, frontend lint + build)",
+      "prompt": "Run truth commands: python -m pytest tests/ -v, ruff check ., mypy ., npm run lint, npm run build. Report results and fix failures.",
+      "template": "Run truth commands: python -m pytest tests/ -v, ruff check ., mypy ., npm run lint, npm run build. Report results and fix failures."
+    }
+  }
+}

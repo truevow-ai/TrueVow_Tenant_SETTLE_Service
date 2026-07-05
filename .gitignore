@@ -1,29 +1,32 @@
+# SETTLE — .gitignore
+# All directory patterns are anchored with leading / to prevent source-leak
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
+/build/
+/develop-eggs/
+/dist/
+/downloads/
+/eggs/
 .eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
+/wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-env/
-ENV/
+# Virtual Environment (anchored to root)
+/venv/
+/env/
+/ENV/
 
 # IDE
 .vscode/
@@ -34,14 +37,14 @@ ENV/
 .cursor/
 
 # Node (opencode runtime)
-node_modules/
+/node_modules/
 
 # Windows artifacts
 nul
 
-# One-off scripts (keep locally, don't track)
-test_db_conn.py
-recover_pyc.py
+# One-off scripts (root only)
+/test_db_conn.py
+/recover_pyc.py
 
 # Environment variables
 .env
@@ -55,10 +58,10 @@ recover_pyc.py
 
 # Logs
 *.log
-logs/
+/logs/
 
-# Data (bulk scraping artifacts — FJC dumps, CSV outputs, etc.)
-data/
+# Data (anchored to root — bulk scraping artifacts: FJC dumps, CSV outputs)
+/data/
 
 # SETTLE data scraping factory — runtime artifacts (network cache + scraped outputs)
 settle_data_scraping_factory/_cache/
@@ -71,9 +74,8 @@ Thumbs.db
 # Testing
 .pytest_cache/
 .coverage
-htmlcov/
+/htmlcov
 
 # Temporary files
 *.tmp
 *.temp
-

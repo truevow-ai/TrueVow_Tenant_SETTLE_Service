@@ -28,7 +28,7 @@ load_dotenv(find_dotenv(usecwd=True, filename=".env.local"))
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _CARRIER_SKILL_DIR = os.path.normpath(
-    os.path.join(_THIS_DIR, "..", "..", "..", "scripts", "scraping-factory", "insurance-carrier")
+    os.path.join(_THIS_DIR, "..", "..", "scripts", "scraping-factory", "insurance-carrier")
 )
 
 CARRIER_FACT_TO_SOURCE_TYPE: dict[str, str] = {
