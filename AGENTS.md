@@ -11,9 +11,13 @@ The orchestrator is at `../TrueVow_Shared_Orchestration/orchestrator.py` (relati
 
 ### On Every Session Start
 ```
+python ../TrueVow_Shared_Orchestration/orchestrator.py sync-memory
+python ../TrueVow_Shared_Orchestration/orchestrator.py memory-summary
 python ../TrueVow_Shared_Orchestration/orchestrator.py agent-checkin start "Working on <service>: <task>"
 ```
-This registers you in the ecosystem dashboard. The CTO now knows you're active.
+This pulls the latest shared knowledge vault, loads the ecosystem context (where
+each service left off, active campaigns, blockers), and registers you in the
+dashboard so the CTO knows you're active.
 
 ### Before Any Work
 ```
