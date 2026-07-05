@@ -146,7 +146,7 @@ def selftest() -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="CAP reporter explorer for FL/CA")
+    ap = argparse.ArgumentParser(description="CAP reporter explorer for all US states")
     ap.add_argument("--states", nargs="+", default=DEFAULT_TARGET_STATES)
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()

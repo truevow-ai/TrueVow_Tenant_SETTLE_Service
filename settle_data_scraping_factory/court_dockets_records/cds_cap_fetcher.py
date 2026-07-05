@@ -102,6 +102,7 @@ def fetch_reporter(
     state: str,
     max_cases: int = 50,
     with_text: bool = False,
+    min_year: int = 2015,
 ) -> Iterator[dict]:
     count = 0
     for volume in list_volumes(f, slug):
@@ -118,6 +119,8 @@ def fetch_reporter(
                 meta, slug, volume,
                 source_url=meta_res.url, source_sha256=meta_res.sha256, fetched_at=meta_res.fetched_at,
             )
+            if rec.get("year") is not None and rec["year"] < min_year:
+                continue
             if with_text and rec["file_name"]:
                 text, tres = fetch_case_text(f, slug, volume, rec["file_name"])
                 rec["opinion_text"] = text
@@ -168,11 +171,12 @@ def selftest() -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="CAP case fetcher (FL/CA)")
+    ap = argparse.ArgumentParser(description="CAP case fetcher (all US states)")
     ap.add_argument("--slug", help="reporter slug, e.g. cal-super-ct or so3d")
     ap.add_argument("--state", help="target state name_long, e.g. California or Florida")
     ap.add_argument("--max", type=int, default=50)
     ap.add_argument("--with-text", action="store_true")
+    ap.add_argument("--min-year", type=int, default=2015, help="Skip cases before this year")
     ap.add_argument("--out", default=None, help="JSONL output path")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
@@ -187,7 +191,7 @@ def main() -> int:
 
     n = 0
     with Fetcher(min_delay=0.5) as f, out_path.open("w", encoding="utf-8") as fh:
-        for rec in fetch_reporter(f, args.slug, args.state, max_cases=args.max, with_text=args.with_text):
+        for rec in fetch_reporter(f, args.slug, args.state, max_cases=args.max, with_text=args.with_text, min_year=args.min_year):
             fh.write(json.dumps(rec, default=str) + "\n")
             n += 1
     print(f"Wrote {n} {args.state} cases from {args.slug} -> {out_path}")

@@ -1,5 +1,6 @@
 # crawl_supervisor.ps1 — keeps the SETTLE crawlers alive (auto-restart).
-# Launches and re-launches: 1 CourtListener FL crawler + 11 per-state CAP crawlers.
+# Launches and re-launches: 1 multi-state CourtListener crawler, 1 MoreLaw crawler,
+# and 50 per-state CAP crawlers (all US states + DC).
 # Dedups via a lockfile (won't run twice), detects running crawlers by python.exe only
 # (never matches a shell), skips crawlers already running or finished (COMPLETE marker),
 # and wraps the loop so it cannot crash. Started by the Startup-folder launcher and/or
@@ -29,20 +30,32 @@ Set-Content -Path $lock -Value $PID
 
 function StateSlug($s) { ($s.ToLower() -replace '[^a-z0-9]+', '_').Trim('_') }
 
-$states = @("California","Texas","Florida","New York","Pennsylvania","Illinois",
-            "Ohio","Georgia","North Carolina","Michigan","New Jersey")
+$states = @("Alabama","Alaska","Arizona","Arkansas","California","Colorado",
+            "Connecticut","Delaware","District of Columbia","Florida","Georgia",
+            "Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky",
+            "Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota",
+            "Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire",
+            "New Jersey","New Mexico","New York","North Carolina","North Dakota",
+            "Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina",
+            "South Dakota","Tennessee","Texas","Utah","Vermont","Virginia",
+            "Washington","West Virginia","Wisconsin","Wyoming")
 
 $crawlers = @()
 $crawlers += [pscustomobject]@{
-    Name = "cl_fl"; Match = @("cds_courtlistener_crawl.py")
-    ArgStr = "cds_courtlistener_crawl.py --hours 720 --min-delay 700"; Complete = $null
+    Name = "cl_multi"; Match = @("cds_courtlistener_crawl.py", "cl_crawl")
+    ArgStr = "cds_courtlistener_crawl.py --states florida,california,texas,new_york,illinois,pennsylvania,ohio,georgia,north_carolina,michigan,new_jersey --hours 720 --min-delay 700"
+    Complete = $null
+}
+$crawlers += [pscustomobject]@{
+    Name = "morelaw"; Match = @("cds_morelaw_crawl.py")
+    ArgStr = "cds_morelaw_crawl.py --hours 720 --min-delay 1.5"; Complete = (Join-Path $out "morelaw_crawl\COMPLETE")
 }
 foreach ($st in $states) {
     $slug = StateSlug $st
     $crawlers += [pscustomobject]@{
         Name     = "cap_$slug"
         Match    = @("cds_cap_crawl.py", $slug)
-        ArgStr   = "cds_cap_crawl.py --state $slug --hours 720 --min-delay 1.0 --min-year 1960"
+        ArgStr   = "cds_cap_crawl.py --state $slug --hours 720 --min-delay 1.0 --min-year 2015"
         Complete = (Join-Path $out "cap_crawl_$slug\COMPLETE")
     }
 }

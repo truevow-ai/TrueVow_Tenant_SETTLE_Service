@@ -14,7 +14,7 @@ volumes (a crash mid-volume re-does that volume; duplicate rows are deduped serv
 at load). Provenance (source_url + sha256 + fetched_at) is preserved on every record.
 
 Run:
-    python cds_cap_crawl.py --state Texas --hours 720 --min-delay 1.0 --min-year 1960
+    python cds_cap_crawl.py --state Texas --hours 720 --min-delay 1.0 --min-year 2015
     python cds_cap_crawl.py --state "New York" --hours 0.02 --max-cases 3   # smoke test
 """
 
@@ -65,7 +65,7 @@ def main() -> int:
     ap.add_argument("--state", required=True, help="Full state name_long, e.g. Texas / 'New York'")
     ap.add_argument("--hours", type=float, default=720.0)
     ap.add_argument("--min-delay", type=float, default=1.0, help="Seconds between requests (politeness)")
-    ap.add_argument("--min-year", type=int, default=1960, help="Skip reporters ending before this year")
+    ap.add_argument("--min-year", type=int, default=2015, help="Skip reporters and cases before this year")
     ap.add_argument("--max-cases", type=int, default=0, help="0 = unlimited (until --hours / corpus end)")
     args = ap.parse_args()
     # Accept either a full name ("New York") or a no-space slug ("new_york"). The slug form
@@ -137,6 +137,9 @@ def main() -> int:
                         continue
                     file_name = meta.get("file_name")
                     if not file_name:
+                        continue
+                    year = capf._year(meta.get("decision_date"))
+                    if year is not None and year < args.min_year:
                         continue
                     rec = capf.normalize_case(meta, slug, volume, meta_res.url, meta_res.sha256, meta_res.fetched_at)
                     try:

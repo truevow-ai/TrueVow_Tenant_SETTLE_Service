@@ -168,14 +168,14 @@ def validate_and_score(c: dict, ex) -> dict:
     return c
 
 
-def run_pipeline(slug: str, state: str, max_cases: int) -> dict:
+def run_pipeline(slug: str, state: str, max_cases: int, min_year: int = 2015) -> dict:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     buckets = {"accepted": [], "needs_review": [], "rejected": []}
     seen_keys: set[str] = set()
     duplicates = 0
 
     with Fetcher(min_delay=0.5) as f:
-        for rec in fetch_reporter(f, slug, state, max_cases=max_cases, with_text=True):
+        for rec in fetch_reporter(f, slug, state, max_cases=max_cases, with_text=True, min_year=min_year):
             cand = build_candidate(rec)
             if cand["status"] == "accepted":
                 if cand["dedup_key"] in seen_keys:
@@ -275,13 +275,14 @@ def main() -> int:
     ap.add_argument("--slug")
     ap.add_argument("--state")
     ap.add_argument("--max", type=int, default=50)
+    ap.add_argument("--min-year", type=int, default=2015, help="Skip cases before this year")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
         return selftest()
     if not (args.slug and args.state):
         ap.error("--slug and --state required (or --selftest)")
-    summary = run_pipeline(args.slug, args.state, args.max)
+    summary = run_pipeline(args.slug, args.state, args.max, min_year=args.min_year)
     print(json.dumps(summary, indent=2))
     return 0
 

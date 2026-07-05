@@ -2,18 +2,17 @@
 cds_courtlistener.py — CourtListener (Free Law Project) opinion adapter (Level 0 API).
 
 CourtListener publishes a large, free corpus of court opinions via a REST API.
-This adapter is the "volume engine" for FL/CA: it pulls published opinions from
-Florida and California state courts and yields normalized records with the SAME
-keys the shared CAP pipeline consumes (cds_cap_pipeline.build_candidate), so
-CourtListener flows through the same validate -> score -> dedup -> route -> loader
-path as CAP and MoreLaw.
+This adapter pulls published opinions from all 50 US state courts and yields
+normalized records with the SAME keys the shared CAP pipeline consumes
+(cds_cap_pipeline.build_candidate), so CourtListener flows through the same
+validate -> score -> dedup -> route -> loader path as CAP and MoreLaw.
 
 INTEGRITY (LOW_BLOCKER_DATA_SOURCES section 6a — zero fabrication):
   * This adapter does NO classification or $-amount parsing of its own. The shared
     deterministic extractor (_common.extract) is the single source of truth for PI
     relevance, injuries, case type, and outcome amount (it abstains on non-PI).
-  * Jurisdiction is taken reliably from the court id (FL/CA appellate court ids),
-    never guessed from free text. Non-FL/CA results are dropped.
+  * Jurisdiction is taken reliably from the court id (STATE_FROM_COURT map),
+    never guessed from free text. Unrecognized court IDs are dropped.
   * Every record carries provenance: source_url (web), full_text_url (API), the
     sha256 of the exact fetched payload, and a fetch timestamp.
   * CourtListener opinions are appellate / state-level and frequently year-only;
@@ -54,21 +53,167 @@ CL_BASE = "https://www.courtlistener.com"
 CL_API = f"{CL_BASE}/api/rest/v4"
 OUT_DIR = Path(__file__).parent / "out"
 
-# FL/CA *state* appellate court ids in CourtListener. Jurisdiction is derived from
-# this map (a structured field), never from parsing free text.
+# State court ids in CourtListener. Jurisdiction is derived from this map (a structured
+# field), never from parsing free text. Court IDs follow CourtListener's naming convention:
+# supreme courts use the state abbreviation; appellate/other courts add suffixes.
+# Unknown/unrecognized court IDs are dropped gracefully (no guessing).
 STATE_FROM_COURT = {
-    # Florida
-    "fla": "Florida",            # Supreme Court of Florida
-    "fladistctapp": "Florida",   # FL District Court of Appeal
+    # Alabama
+    "ala": "Alabama",
+    "alactcivapp": "Alabama",
+    "alactcrimapp": "Alabama",
+    # Alaska
+    "alaska": "Alaska",
+    "alaskactapp": "Alaska",
+    # Arizona
+    "ariz": "Arizona",
+    "arizctapp": "Arizona",
+    # Arkansas
+    "ark": "Arkansas",
+    "arkctapp": "Arkansas",
     # California
-    "cal": "California",          # Supreme Court of California
-    "calctapp": "California",     # CA Court of Appeal
-    "calappdeptsuper": "California",  # CA Appellate Division of the Superior Court
+    "cal": "California",
+    "calctapp": "California",
+    "calappdeptsuper": "California",
+    # Colorado
+    "colo": "Colorado",
+    "coloctapp": "Colorado",
+    # Connecticut
+    "conn": "Connecticut",
+    "connappct": "Connecticut",
+    # Delaware
+    "del": "Delaware",
+    "delch": "Delaware",
+    # District of Columbia
+    "dc": "District of Columbia",
+    # Florida
+    "fla": "Florida",
+    "fladistctapp": "Florida",
+    # Georgia
+    "ga": "Georgia",
+    "gactapp": "Georgia",
+    # Hawaii
+    "haw": "Hawaii",
+    "hawapp": "Hawaii",
+    # Idaho
+    "idaho": "Idaho",
+    "idahoctapp": "Idaho",
+    # Illinois
+    "ill": "Illinois",
+    "illappct": "Illinois",
+    # Indiana
+    "ind": "Indiana",
+    "indctapp": "Indiana",
+    # Iowa
+    "iowa": "Iowa",
+    "iowactapp": "Iowa",
+    # Kansas
+    "kan": "Kansas",
+    "kanctapp": "Kansas",
+    # Kentucky
+    "ky": "Kentucky",
+    "kyctapp": "Kentucky",
+    # Louisiana
+    "la": "Louisiana",
+    "lactapp": "Louisiana",
+    # Maine
+    "me": "Maine",
+    # Maryland
+    "md": "Maryland",
+    "mdctspecapp": "Maryland",
+    # Massachusetts
+    "mass": "Massachusetts",
+    "massappct": "Massachusetts",
+    # Michigan
+    "mich": "Michigan",
+    "michctapp": "Michigan",
+    # Minnesota
+    "minn": "Minnesota",
+    "minnctapp": "Minnesota",
+    # Mississippi
+    "miss": "Mississippi",
+    "missctapp": "Mississippi",
+    # Missouri
+    "mo": "Missouri",
+    "moctapp": "Missouri",
+    # Montana
+    "mont": "Montana",
+    # Nebraska
+    "neb": "Nebraska",
+    "nebctapp": "Nebraska",
+    # Nevada
+    "nev": "Nevada",
+    "nevapp": "Nevada",
+    # New Hampshire
+    "nh": "New Hampshire",
+    # New Jersey
+    "nj": "New Jersey",
+    "njsuperctappdiv": "New Jersey",
+    # New Mexico
+    "nm": "New Mexico",
+    "nmctapp": "New Mexico",
+    # New York
+    "ny": "New York",
+    "nyappdiv": "New York",
+    "nyappterm": "New York",
+    # North Carolina
+    "nc": "North Carolina",
+    "ncctapp": "North Carolina",
+    # North Dakota
+    "nd": "North Dakota",
+    "ndctapp": "North Dakota",
+    # Ohio
+    "ohio": "Ohio",
+    "ohioctapp": "Ohio",
+    # Oklahoma
+    "okla": "Oklahoma",
+    "oklactapp": "Oklahoma",
+    "oklacivapp": "Oklahoma",
+    # Oregon
+    "or": "Oregon",
+    "orctapp": "Oregon",
+    # Pennsylvania
+    "pa": "Pennsylvania",
+    "pacommwct": "Pennsylvania",
+    "pasuperct": "Pennsylvania",
+    # Rhode Island
+    "ri": "Rhode Island",
+    # South Carolina
+    "sc": "South Carolina",
+    "scctapp": "South Carolina",
+    # South Dakota
+    "sd": "South Dakota",
+    # Tennessee
+    "tenn": "Tennessee",
+    "tennctapp": "Tennessee",
+    "tenncrimapp": "Tennessee",
+    # Texas
+    "tex": "Texas",
+    "texapp": "Texas",
+    "texcrimapp": "Texas",
+    # Utah
+    "utah": "Utah",
+    "utahctapp": "Utah",
+    # Vermont
+    "vt": "Vermont",
+    # Virginia
+    "va": "Virginia",
+    "vactapp": "Virginia",
+    # Washington
+    "wash": "Washington",
+    "washctapp": "Washington",
+    # West Virginia
+    "wva": "West Virginia",
+    # Wisconsin
+    "wis": "Wisconsin",
+    "wisctapp": "Wisconsin",
+    # Wyoming
+    "wyo": "Wyoming",
 }
-STATE_TO_COURTS = {
-    "Florida": [c for c, s in STATE_FROM_COURT.items() if s == "Florida"],
-    "California": [c for c, s in STATE_FROM_COURT.items() if s == "California"],
-}
+
+STATE_TO_COURTS = {}
+for _c, _s in STATE_FROM_COURT.items():
+    STATE_TO_COURTS.setdefault(_s, []).append(_c)
 
 DEFAULT_QUERY = "personal injury negligence damages"
 
@@ -198,7 +343,7 @@ def fetch_opinion_record(
     court_id = item.get("court_id") or queried_court
     jurisdiction = STATE_FROM_COURT.get(court_id)
     if jurisdiction is None:
-        return None  # not an FL/CA court we recognize -> drop (no guessing)
+        return None  # not a recognized state court -> drop (no guessing)
 
     op_id = _opinion_id(item)
     if not op_id:
@@ -247,7 +392,7 @@ def fetch_state_cases(
     filed_before: Optional[str] = None,
     api_key: Optional[str] = None,
 ) -> Iterator[dict]:
-    """Top-level adapter generator: FL/CA opinions -> normalized CAP-schema records."""
+    """Top-level adapter generator: state court opinions -> normalized CAP-schema records."""
     headers = _auth_headers(api_key if api_key is not None else _load_api_key())
     courts: list[tuple[str, str]] = []
     for state in states:
@@ -413,7 +558,7 @@ def selftest() -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="CourtListener FL/CA opinion adapter (pipeline-routed)")
+    ap = argparse.ArgumentParser(description="CourtListener state court opinion adapter (pipeline-routed)")
     ap.add_argument("--states", nargs="+", default=["Florida", "California"])
     ap.add_argument("--query", default=DEFAULT_QUERY)
     ap.add_argument("--max", type=int, default=40)

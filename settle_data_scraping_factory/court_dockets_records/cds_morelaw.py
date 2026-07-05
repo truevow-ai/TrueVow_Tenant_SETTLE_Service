@@ -1,5 +1,5 @@
 """
-cds_morelaw.py — MoreLaw.com verdict adapter (Level 0/1, free, FL/CA, real $ amounts).
+cds_morelaw.py — MoreLaw.com verdict adapter (Level 0/1, free, all US states, real $ amounts).
 
 MoreLaw publishes free verdict/case write-ups. Subject tagging is NOISY (the
 "personal_injury" subject page contains mislabeled criminal cases), so EVERY case
@@ -42,7 +42,21 @@ PI_SUBJECTS = [
     "product_liability", "products_liability", "truck_wrecks", "negligence",
     "dram_shop", "nursing", "semi-tractor_trailer", "uninsured_motorist",
 ]
-STATE_NAME = {"FL": "Florida", "CA": "California"}
+STATE_NAME = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+    "DC": "District of Columbia", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii",
+    "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
+    "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine",
+    "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota",
+    "MS": "Mississippi", "MO": "Missouri", "MT": "Montana", "NE": "Nebraska",
+    "NV": "Nevada", "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico",
+    "NY": "New York", "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio",
+    "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island",
+    "SC": "South Carolina", "SD": "South Dakota", "TN": "Tennessee",
+    "TX": "Texas", "UT": "Utah", "VT": "Vermont", "VA": "Virginia",
+    "WA": "Washington", "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming",
+}
 NAME_TO_CODE = {v: k for k, v in STATE_NAME.items()}
 
 _LINK_RE = re.compile(r'/verdicts/[^"\']*?/([A-Z]{2})/(\d+)/')
@@ -296,7 +310,7 @@ def selftest() -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="MoreLaw FL/CA verdict adapter (pipeline-routed)")
+    ap = argparse.ArgumentParser(description="MoreLaw state court verdict adapter (pipeline-routed)")
     ap.add_argument("--states", nargs="+", default=["Florida", "California"])
     ap.add_argument("--subjects", nargs="+", default=None)
     ap.add_argument("--max", type=int, default=25)
