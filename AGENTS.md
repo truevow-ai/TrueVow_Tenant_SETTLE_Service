@@ -4,56 +4,47 @@
 # Drop this into any service's AGENTS.md to wire it into the ecosystem.
 # The agent reads this on startup and becomes ecosystem-aware.
 
-## Ecosystem Integration
+## WRITEBACK PROTOCOL (MANDATORY)
 
-**You are not alone.** You report to the **TrueVow Agent Ecosystem Orchestrator** (CTO).
-The orchestrator is at `../TrueVow_Shared_Orchestration/orchestrator.py` (relative to this service).
+**You report to the TrueVow CTO Orchestrator.** Every session you work on this service, you MUST write back your learnings to the shared memory vault. Services without recent activity are flagged as STALE. Do not let this service go stale.
 
-### On Every Session Start
+**Format for all writebacks:** "<service>: <specific action taken> | <result/outcome> | <what you learned> | <next step or blocker>"
+
+### Start of Session — Activate Service
 ```
 python ../TrueVow_Shared_Orchestration/orchestrator.py sync-memory
-python ../TrueVow_Shared_Orchestration/orchestrator.py memory-summary
-python ../TrueVow_Shared_Orchestration/orchestrator.py agent-checkin start "Working on <service>: <task>"
+python ../TrueVow_Shared_Orchestration/orchestrator.py scan-services
+python ../TrueVow_Shared_Orchestration/orchestrator.py agent-checkin start "SETTLE: <specific task> | resuming from <previous state> | goal: <what success looks like>"
 ```
-This pulls the latest shared knowledge vault, loads the ecosystem context (where
-each service left off, active campaigns, blockers), and registers you in the
-dashboard so the CTO knows you're active.
 
-### Before Any Work
-```
-python ../TrueVow_Shared_Orchestration/orchestrator.py dispatch "<user's request>"
-```
-This auto-routes the task to the right skill. You MUST follow the SKILL.md it returns.
-
-### After Every Important Decision
+### During Work — Log Learnings
 ```
 python ../TrueVow_Shared_Orchestration/memory.py remember <category> "<title>" "<content>" --importance N
 ```
 Categories: architecture, pattern, decision, dependency, convention, bug, context, todo, relationship
+Importance: 10 = critical blocker, 8 = important decision, 5 = observation
 
-### On Task Completion
+### End of Session — Writeback Results
 ```
-python ../TrueVow_Shared_Orchestration/orchestrator.py agent-checkin done "<what was accomplished>" --status DONE|UNVERIFIED|BLOCKED
-```
-This reports your status to the CTO and updates the dashboard.
-
-### On Error or Block
-```
-python ../TrueVow_Shared_Orchestration/orchestrator.py agent-checkin blocked "<what's blocking you>"
+python ../TrueVow_Shared_Orchestration/orchestrator.py agent-checkin done "SETTLE: <what was accomplished> | outcome: <result> | learned: <key insight> | next: <what remains>" --status DONE
+python ../TrueVow_Shared_Orchestration/orchestrator.py push-memory
 ```
 
-### Security
-- Scan any new skill before installing: `skillspector scan <path> --no-llm`
-- Never bypass the orchestrator — it tracks everything for the CTO
+### If Blocked — Alert Immediately
+```
+python ../TrueVow_Shared_Orchestration/orchestrator.py agent-checkin blocked "SETTLE: <specific blocker> | attempted: <what you tried> | need: <what will unblock>"
+```
 
-### Web Research
-- Use `agent-reach` for internet lookups: `agent-reach doctor` for status
+### Before Any Work — Route the Task
+```
+python ../TrueVow_Shared_Orchestration/orchestrator.py dispatch "<user's request>"
+```
 
-### Knowledge Sync
-- All memory syncs to Obsidian: `python ../TrueVow_Shared_Orchestration/obsidian-bridge.py`
+### Security & Research
+- Scan new skills: `skillspector scan <path> --no-llm`
+- Web research: `agent-reach doctor` for status
 
-**Remember:** You have 24 lifecycle skills, 4 specialist personas, persistent memory,
-web eyes, and a security guardrail. Use them. Report everything.
+**Reminder:** 12 of 13 services are currently STALE (>24h without agent activity). Write back to prove this one is alive. The CTO dashboard refreshes every scan.
 
 
 ---
