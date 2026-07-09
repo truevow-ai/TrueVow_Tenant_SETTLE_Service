@@ -31,6 +31,7 @@ if str(_FACTORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_FACTORY_ROOT))
 
 from _common.extract import extract  # noqa: E402
+from _common.enrich import enrich  # noqa: E402
 from cds_cap_fetcher import fetch_reporter  # noqa: E402
 from _common.fetcher import Fetcher  # noqa: E402
 
@@ -113,13 +114,35 @@ def build_candidate(rec: dict) -> dict:
         "extraction_method": "deterministic_regex_keyword",
         "case_name": rec.get("name_abbreviation"),
         "official_citation": rec.get("official_citation"),
+        # enriched metadata (varies by source — nullable when absent)
+        "court_name": rec.get("court_name") or rec.get("court_id"),
+        "court_abbrev": rec.get("court_abbrev"),
+        "docket_number": rec.get("docket_number"),
+        "word_count": rec.get("word_count"),
         # scoring / routing (filled by validate_and_score)
         "dedup_key": None,
         "confidence_score": None,
         "status": None,
         "reason": None,
         "_extraction": ex.to_dict(),
+        "_enrichment": {},
     }
+
+    if text:
+        ef = enrich(text, case_type=ex.case_type)
+        candidate["_enrichment"] = ef.to_dict()
+
+        for field_name in [
+            "judge_name", "medical_bills", "economic_damages", "non_economic_damages",
+            "punitive_damages", "lost_wages", "plaintiff_age_range", "trial_duration_days",
+            "expert_witnesses_plaintiff", "expert_witnesses_defense",
+            "defendant_category", "defendant_industry", "insurance_carrier",
+            "policy_limit_indicator", "verdict_date", "filing_date",
+            "comparative_negligence_pct", "liability_tier",
+        ]:
+            val = getattr(ef, field_name, None)
+            if val is not None:
+                candidate[field_name] = val
     candidate["dedup_key"] = dedup_key(rec)
     return validate_and_score(candidate, ex)
 
@@ -215,11 +238,18 @@ def selftest() -> int:
         "official_citation": "1 So. 3d 999", "source_url": "https://static.case.law/so3d/1/CasesMetadata.json",
         "full_text_url": "https://static.case.law/so3d/1/cases/0999-01.json", "text_sha256": "x" * 64,
         "fetched_at": "2026-06-23T00:00:00+00:00",
+        "court_name": "Florida Supreme Court", "court_abbrev": "Fla.", "docket_number": "SC18-999",
     }
 
     print("Accepted path (PI + sourced $):")
-    pi = dict(base, opinion_text=("The jury awarded the plaintiff $1,250,000 in damages for cervical "
-                                  "spine injuries from the motor vehicle accident due to negligence."))
+    pi = dict(base, opinion_text=(
+        "WERDEGAR, J.\n\n"
+        "The jury returned a verdict for the plaintiff in the amount of $1,250,000 in damages for cervical "
+        "spine injuries from the motor vehicle accident due to negligence. "
+        "The plaintiff, aged 38, incurred medical bills of $245,000. "
+        "The court awarded economic damages of $350,000 and non-economic damages of $900,000. "
+        "After a 7-day trial, the jury returned its verdict on March 3, 2022."
+    ))
     c = build_candidate(pi)
     check("status accepted", c["status"] == "accepted")
     check("amount captured", c["exact_outcome_amount"] == 1_250_000)
@@ -227,6 +257,23 @@ def selftest() -> int:
     check("has snippet provenance", bool(c["amount_snippet"]) and "1,250,000" in c["amount_snippet"])
     check("confidence >= threshold", c["confidence_score"] >= ACCEPT_CONFIDENCE)
     check("dedup_key set", bool(c["dedup_key"]))
+    check("court_name propagated", c.get("court_name") == "Florida Supreme Court")
+    check("docket_number propagated", c.get("docket_number") == "SC18-999")
+    check("enrich judge_name", c.get("judge_name") == "WERDEGAR J.")
+    check("enrich medical_bills", c.get("medical_bills") == 245000.0)
+    check("enrich economic_damages", c.get("economic_damages") == 350000.0)
+    check("enrich non_economic_damages", c.get("non_economic_damages") == 900000.0)
+    check("enrich plaintiff_age_range", c.get("plaintiff_age_range") == "30_44")
+    check("enrich trial_duration_days", c.get("trial_duration_days") == 7)
+    check("enrich verdict_date", c.get("verdict_date") == "March 3, 2022")
+
+    print("CourtListener-style record (court_id used as court_name fallback):")
+    cl_base = dict(base, source="courtlistener")
+    del cl_base["court_name"]
+    del cl_base["court_abbrev"]
+    cl_base["court_id"] = "fla"
+    c_cl = build_candidate(cl_base)
+    check("court_name falls back to court_id", c_cl.get("court_name") == "fla")
 
     print("Rejected path (not PI):")
     c2 = build_candidate(dict(base, opinion_text="In re Amendments to Florida Rule of Criminal Procedure 3.851."))

@@ -42,7 +42,7 @@ $states = @("Alabama","Alaska","Arizona","Arkansas","California","Colorado",
 
 $crawlers = @()
 $crawlers += [pscustomobject]@{
-    Name = "cl_multi"; Match = @("cds_courtlistener_crawl.py", "cl_crawl")
+    Name = "cl_multi"; Match = @("cds_courtlistener_crawl.py")
     ArgStr = "cds_courtlistener_crawl.py --states florida,california,texas,new_york,illinois,pennsylvania,ohio,georgia,north_carolina,michigan,new_jersey --hours 720 --min-delay 700"
     Complete = $null
 }

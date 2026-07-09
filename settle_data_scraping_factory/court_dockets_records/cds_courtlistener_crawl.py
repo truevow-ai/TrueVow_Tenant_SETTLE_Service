@@ -93,12 +93,15 @@ def _preseed_seen(slug: str) -> set:
     return seed
 
 
-def _get_riding(f, url, params, headers, log, sleep_s, deadline):
-    while time.time() < deadline:
+def _get_riding(f, url, params, headers, log, sleep_s, deadline, max_fails_per_url=3):
+    fails = 0
+    while time.time() < deadline and fails < max_fails_per_url:
         try:
             return f.get(url, params=params, headers=headers)
         except Exception as e:
-            log.warning("throttled/error: %s -- sleeping %.0fs for the rolling window", str(e)[:90], sleep_s)
+            fails += 1
+            log.warning("throttled/error (%d/%d): %s -- sleeping %.0fs",
+                        fails, max_fails_per_url, str(e)[:90], sleep_s)
             time.sleep(sleep_s)
     return None
 
