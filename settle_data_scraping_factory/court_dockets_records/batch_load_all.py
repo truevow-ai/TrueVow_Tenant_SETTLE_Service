@@ -28,22 +28,40 @@ OUT = _HERE / "out"
 
 
 def find_payloads(out_root: Path, sources: list[str] | None = None) -> list[Path]:
-    patterns = ["*_accepted.jsonl", "*_needs_review.jsonl"]
+    # Prefer the ENRICHED version of every accepted/needs_review file. The
+    # enriched files carry carriers, damages, ages, ISO-mappable dates — loading
+    # the bare *_accepted.jsonl would silently discard all enrichment work.
+    # Derived/intermediate files are never payloads.
+    _DERIVED = (".verdicts.", ".rejects.", ".exa_dry.", ".enriched.")
+
+    def _excluded(f: Path) -> bool:
+        return any(tag in f.name for tag in _DERIVED) or ".verdicts." in f.name
+
+    def _src_ok(f: Path) -> bool:
+        if f.parent.name == "morelaw_crawl" or f.name.startswith("morelaw"):
+            return not sources or "morelaw" in sources
+        if "courtlistener" in f.name.lower() or f.parent.name.startswith("cl_"):
+            return not sources or "courtlistener" in sources
+        return not sources or "cap" in sources
+
     payloads: set[Path] = set()
-    for pat in patterns:
-        for f in out_root.rglob(pat):
-            if not f.stat().st_size:
+    for base_pat in ("*_accepted.jsonl", "*_needs_review.jsonl"):
+        for f in out_root.rglob(base_pat):
+            if _excluded(f) or not f.stat().st_size or not _src_ok(f):
                 continue
-            if f.parent.name == "morelaw_crawl":
-                if sources and "morelaw" not in sources:
-                    continue
-            elif "courtlistener" in f.name.lower():
-                if sources and "courtlistener" not in sources:
-                    continue
-            else:
-                if sources and "cap" not in sources:
-                    continue
+            # Skip a base file when its *_enriched.jsonl sibling exists — the
+            # enriched sibling is picked up by the *_enriched glob below.
+            enriched = f.with_name(f.stem + "_enriched.jsonl")
+            if enriched.exists():
+                continue
             payloads.add(f)
+
+    for enr_pat in ("*_accepted_enriched.jsonl", "*_needs_review_enriched.jsonl"):
+        for f in out_root.rglob(enr_pat):
+            if _excluded(f) or not f.stat().st_size or not _src_ok(f):
+                continue
+            payloads.add(f)
+
     return sorted(payloads)
 
 

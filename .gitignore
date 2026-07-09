@@ -79,3 +79,7 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# insurance-carrier skill HTTP cache
+scripts/scraping-factory/insurance-carrier/.cache/
+

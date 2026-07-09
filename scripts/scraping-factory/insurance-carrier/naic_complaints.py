@@ -11,12 +11,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import sys
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
 
 from carrier_common import (
     CarrierFact,
@@ -47,6 +45,10 @@ def get_complaint_index(
     year: int | None = None,
     cache_days: int = _CACHE_DAYS,
 ) -> list[dict[str, Any]]:
+    # The Texas complaint-index dataset (pa9u-9s9w) keys carriers by `naic_id`
+    # and `year`; complaint tallies live in col1/col2/col3. The raw complaint
+    # records dataset carries no carrier identity, so all carrier-scoped
+    # lookups go through this index.
     params: dict[str, Any] = {
         "$offset": offset,
         "$limit": limit,
@@ -54,9 +56,9 @@ def get_complaint_index(
     }
     if naic_code:
         assert_valid_naic(naic_code)
-        params["naic"] = naic_code
+        params["naic_id"] = naic_code
     if year:
-        params["complaint_year"] = str(year)
+        params["year"] = str(year)
 
     url = f"{TX_SOCRATA_BASE}/{COMPLAINT_INDEX_DATASET}"
     data = cached_get_json(url, headers=_headers(), params=params, cache_days=cache_days)
@@ -70,17 +72,20 @@ def get_raw_complaints(
     year: int | None = None,
     cache_days: int = _CACHE_DAYS,
 ) -> list[dict[str, Any]]:
+    # Carrier-scoped complaint data is only available via the index dataset
+    # (the raw-records dataset has no NAIC/company column). Delegate so callers
+    # passing a naic_code get meaningful, carrier-attributed rows.
+    if naic_code:
+        return get_complaint_index(
+            offset=offset, limit=limit, naic_code=naic_code,
+            year=year, cache_days=cache_days,
+        )
+
     params: dict[str, Any] = {
         "$offset": offset,
         "$limit": limit,
         "$order": ":id",
     }
-    if naic_code:
-        assert_valid_naic(naic_code)
-        params["naic"] = naic_code
-    if year:
-        params["complaint_year"] = str(year)
-
     url = f"{TX_SOCRATA_BASE}/{COMPLAINT_RECORDS_DATASET}"
     data = cached_get_json(url, headers=_headers(), params=params, cache_days=cache_days)
     return data if isinstance(data, list) else [data]
@@ -91,13 +96,27 @@ def to_carrier_facts(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
     now = datetime.now(timezone.utc).isoformat()
 
     for row in raw:
-        naic = row.get("naic", "")
+        # Index dataset (pa9u-9s9w) uses naic_id; tolerate the older `naic` key.
+        naic = row.get("naic_id") or row.get("naic", "")
         try:
             assert_valid_naic(str(naic))
         except InvariantError:
             continue
 
-        complaint_count = int(row.get("complaint_count", 0) or 0)
+        # Complaint tallies are split across col1/col2/col3 (confirmed/
+        # questioned/total); sum whatever is numeric. Fall back to an explicit
+        # complaint_count if a future schema provides one.
+        def _int(v: Any) -> int:
+            try:
+                return int(float(v))
+            except (TypeError, ValueError):
+                return 0
+
+        if "complaint_count" in row:
+            complaint_count = _int(row.get("complaint_count"))
+        else:
+            complaint_count = _int(row.get("col1")) + _int(row.get("col2")) + _int(row.get("col3"))
+
         try:
             assert_in_range("complaint_count", complaint_count, *CARRIER_BOUNDS["complaint_count"])
         except InvariantError:
@@ -109,9 +128,9 @@ def to_carrier_facts(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
             entity_name=str(row.get("company_name", "")),
             value_text=json.dumps({
                 "complaint_count": complaint_count,
-                "complaint_year": row.get("complaint_year"),
-                "coverage_type": row.get("coverage_type"),
-                "complaint_type": row.get("complaint_type"),
+                "complaint_year": row.get("year") or row.get("complaint_year"),
+                "coverage_type": row.get("type_cd") or row.get("coverage_type"),
+                "org_id": row.get("org_id"),
             }),
             observed_at=now,
             source_url=f"{TX_SOCRATA_BASE}/{COMPLAINT_INDEX_DATASET}",
