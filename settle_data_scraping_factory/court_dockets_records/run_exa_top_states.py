@@ -15,6 +15,18 @@ _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 sys.path.insert(0, str(_HERE.parent))
 
+# Load API keys from the repo-root .env.local regardless of CWD (a bare
+# subprocess launch may not sit in the repo root).
+from dotenv import load_dotenv  # noqa: E402
+for _envp in (_HERE.parent.parent / ".env.local", Path.cwd() / ".env.local"):
+    if _envp.exists():
+        load_dotenv(_envp)
+        break
+
+import os  # noqa: E402
+import cds_enrich_exa  # noqa: E402
+# Ensure the module-level key reflects the loaded env.
+cds_enrich_exa.EXA_API_KEY = os.getenv("EXA_API_KEY", cds_enrich_exa.EXA_API_KEY)
 from cds_enrich_exa import enrich_file_exa  # noqa: E402
 
 OUT = _HERE / "out"
