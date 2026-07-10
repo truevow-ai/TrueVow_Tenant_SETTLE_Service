@@ -117,6 +117,18 @@ class SupabaseRESTQuery:
         self._filters.append(f"{column}=ilike.{encoded}")
         return self
 
+    def is_(self, column: str, value: Any) -> 'SupabaseRESTQuery':
+        """IS filter for null/boolean checks. PostgREST expects `is.null`,
+        `is.true`, `is.false` (lowercase), not the Python None/True/False repr."""
+        if value is None:
+            token = "null"
+        elif isinstance(value, bool):
+            token = "true" if value else "false"
+        else:
+            token = str(value).lower()
+        self._filters.append(f"{column}=is.{token}")
+        return self
+
     def cs(self, column: str, values) -> 'SupabaseRESTQuery':
         """
         PostgREST array-contains operator: column contains ALL of these values.
@@ -164,6 +176,13 @@ class SupabaseRESTQuery:
     def offset(self, count: int) -> 'SupabaseRESTQuery':
         """Offset results."""
         self._offset_val = count
+        return self
+
+    def range(self, start: int, end: int) -> 'SupabaseRESTQuery':
+        """Inclusive row range [start, end] (mirrors supabase-py .range()).
+        Implemented via offset + limit so it composes with the URL builder."""
+        self._offset_val = start
+        self._limit_val = max(0, end - start + 1)
         return self
     
     def _build_url(self) -> str:
@@ -228,7 +247,13 @@ class SupabaseNOTBuilder:
     
     def is_(self, column: str, value: Any) -> SupabaseRESTQuery:
         """NOT IS filter (e.g., for null checks)."""
-        self._query._filters.append(f"{column}=not.is.{value}")
+        if value is None:
+            token = "null"
+        elif isinstance(value, bool):
+            token = "true" if value else "false"
+        else:
+            token = str(value).lower()
+        self._query._filters.append(f"{column}=not.is.{token}")
         return self._query
     
     def eq(self, column: str, value: Any) -> SupabaseRESTQuery:

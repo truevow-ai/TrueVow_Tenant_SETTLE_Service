@@ -139,6 +139,11 @@ class VerdictRecord(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    # No-fabrication audit trail (evidence per field).
+    validated_field_count: Optional[int] = None
+    validation_counts: Optional[Dict[str, Any]] = None
+    field_evidence: Optional[Dict[str, Any]] = None
+
 
 # ============================================================================
 # API REQUEST/RESPONSE MODELS
@@ -238,6 +243,11 @@ class VerdictSearchResult(BaseModel):
     completeness_score: float
     review_status: str
     created_at: datetime
+    # No-fabrication audit trail: how many fields were verbatim-verified against
+    # source evidence, and the evidence (value + snippet + source_url) per field.
+    validated_field_count: Optional[int] = None
+    validation_counts: Optional[Dict[str, Any]] = None
+    field_evidence: Optional[Dict[str, Any]] = None
 
 
 class VerdictSearchResponse(BaseModel):
