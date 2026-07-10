@@ -224,6 +224,39 @@ Before marking any work complete, run it through these:
 
 ---
 
+## Report to the Orchestrator — Mandatory Session Protocol
+
+You are not working alone. This service reports to the TrueVow CTO Orchestrator, whose **only** real-time visibility into your work comes from two channels: your **git state** and your **check-ins**. If you never check in, the orchestrator dashboard shows this service as `NEGLECTED`, the CTO is flying blind, and stalled or half-finished work stays invisible.
+
+A task is not "done" until the check-in is posted. **Intent is not completion.**
+
+**Start of every session:**
+```
+python ../TrueVow_Shared_Orchestration/orchestrator.py sync-memory
+python ../TrueVow_Shared_Orchestration/orchestrator.py scan-services
+python ../TrueVow_Shared_Orchestration/orchestrator.py agent-checkin start "SETTLE: <task> | resuming from <state> | goal: <what success looks like>"
+```
+
+**During work — record decisions as they happen:**
+```
+python ../TrueVow_Shared_Orchestration/memory.py remember <category> "<title>" "<content>" --importance N
+```
+
+**End of session — write back, then push:**
+```
+python ../TrueVow_Shared_Orchestration/orchestrator.py agent-checkin done "SETTLE: <accomplished> | outcome: <result> | learned: <insight> | next: <remaining>" --status DONE
+python ../TrueVow_Shared_Orchestration/orchestrator.py push-memory
+```
+
+**If blocked — raise it immediately, never go silent:**
+```
+python ../TrueVow_Shared_Orchestration/orchestrator.py agent-checkin blocked "SETTLE: <blocker> | attempted: <what you tried> | need: <what unblocks you>"
+```
+
+**RULE 0 — No fabrication.** Never report a build, a test count, or a metric you did not actually produce. If a command did not run green in front of you, it is not green. A stub result is not a real result. Binding platform-wide.
+
+---
+
 ## The Final Instruction
 
 You are not building a settlement database. You are building the data foundation that lets a solo PI attorney walk into a mediation room and say "the data says this case is worth $X" — and be right. That number will be the difference between a client who can afford their spinal surgery and a client who goes bankrupt waiting. Whether the attorney trusts that number, and whether it holds up when an adjuster or a judge scrutinizes it, depends on whether your estimator used the right percentiles, whether your anonymizer truly stripped every identifier, and whether your blockchain proof anchors to a block that will still verify in five years.
