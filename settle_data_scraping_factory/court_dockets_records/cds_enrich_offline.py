@@ -77,6 +77,11 @@ def enrich_candidate(c: dict, f: Optional[Fetcher] = None) -> dict:
         val = getattr(ef, field_name, None)
         if val is not None:
             enriched[field_name] = val
+            # Promote the per-field source snippet so every enriched value is
+            # verifiable at the top level (no-fabrication provenance).
+            snip = getattr(ef, f"{field_name}_snippet", None)
+            if snip:
+                enriched[f"{field_name}_snippet"] = snip
 
     return enriched
 

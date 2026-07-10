@@ -39,6 +39,7 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 from verdict_validator import normalize_and_validate  # noqa: E402
+from no_fabrication_gate import verify_record  # noqa: E402
 
 SETTLE_API_URL = os.getenv("SETTLE_API_URL", "http://localhost:8002")
 # Admin key must start with 'settle_' (auth format gate). In mock mode any such key works.
@@ -65,9 +66,10 @@ def map_candidate_to_verdict(c: dict) -> dict:
     # jurisdiction: use a real county hint if the opinion text gave one, else the state.
     jurisdiction = c.get("county_hint") or state
 
-    # case_type: keep specific type if found; else a general PI bucket (accepted rows
-    # always have an injury or a case_type, so this is a category, not a fabrication).
-    case_type = c.get("case_type") or ("personal_injury_general" if c.get("injury_category") else None)
+    # case_type: use ONLY the classified type. No fabricated fallback bucket —
+    # a record without a real, evidence-backed case_type is rejected by the
+    # no-fabrication gate rather than stamped "personal_injury_general".
+    case_type = c.get("case_type")
 
     # Provenance + evidence + honest imprecision flags for the human reviewer.
     notes = {
@@ -146,6 +148,11 @@ def map_candidate_to_verdict(c: dict) -> dict:
         "confidence_score": c.get("confidence_score"),
         "completeness_score": completeness_score,
         "scraped_at": c.get("fetched_at"),
+        # No-fabrication audit trail (how many fields were verbatim-verified,
+        # and the evidence for each) — passed through from the gate.
+        "validation_counts": c.get("validation_counts"),
+        "validated_field_count": c.get("validated_field_count"),
+        "field_evidence": c.get("field_evidence"),
     }
     # Drop null amount fields so we don't send explicit nulls.
     return {k: v for k, v in record.items() if v is not None}
@@ -163,15 +170,39 @@ def _read_rows(path: Path) -> list[dict]:
 
 def load_file(in_path: Path, dry_run: bool, source_label: Optional[str] = None) -> dict:
     rows = _read_rows(in_path)
-    mapped = [map_candidate_to_verdict(r) for r in rows]
 
-    # DB-boundary validation gate: EVERY record must pass before it can be
-    # posted. Rejects are quarantined to a sidecar file (never inserted);
-    # warnings (fields coerced/dropped) are tallied for the reviewer.
+    # TWO mandatory gates, in order:
+    #  1. no_fabrication_gate.verify_record on the ORIGINAL candidate (which
+    #     still holds per-field snippets) — strips any field whose value is not
+    #     verbatim-backed by evidence + a source_url, and records how many
+    #     fields were independently validated.
+    #  2. verdict_validator.normalize_and_validate on the mapped record — maps
+    #     enums to DB vocab, ISO dates, bounds-checks, hard-rejects unmappable.
     records: list[dict] = []
     rejects: list[dict] = []
     warn_count = 0
-    for original, m in zip(rows, mapped):
+    fabrication_stripped = 0
+    for original in rows:
+        gate = verify_record(original)
+        if gate["rejected"]:
+            rejects.append({
+                "case_name": original.get("case_name"),
+                "official_citation": original.get("official_citation"),
+                "source_url": original.get("source_url") or original.get("full_text_url"),
+                "errors": [f"no-fabrication: {r}" for r in gate["reject_reasons"]],
+                "record": original,
+            })
+            continue
+        fabrication_stripped += len(gate["stripped"])
+        verified = gate["record"]  # fabricated/unverifiable fields removed
+
+        m = map_candidate_to_verdict(verified)
+        # Carry the audit trail so the reviewer/DB can see how many fields were
+        # validated and against what evidence.
+        m["validation_counts"] = gate["validation_counts"]
+        m["validated_field_count"] = gate["validated_total"]
+        m["field_evidence"] = gate["evidence"]
+
         clean, errors, warnings = normalize_and_validate(m)
         warn_count += len(warnings)
         if clean is None:
@@ -200,6 +231,7 @@ def load_file(in_path: Path, dry_run: bool, source_label: Optional[str] = None) 
         "valid": len(records),
         "rejected": len(rejects),
         "warnings": warn_count,
+        "fabrication_fields_stripped": fabrication_stripped,
         "rejects_file": str(in_path.with_suffix(".rejects.jsonl")) if rejects else None,
     }
 

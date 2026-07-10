@@ -34,6 +34,7 @@ if str(_HERE) not in sys.path:
 
 from cds_cap_loader import map_candidate_to_verdict, _read_rows  # noqa: E402
 from verdict_validator import normalize_and_validate  # noqa: E402
+from no_fabrication_gate import verify_record  # noqa: E402
 from batch_load_all import find_payloads  # noqa: E402
 
 OUT = _HERE / "out"
@@ -56,6 +57,7 @@ _COLUMNS = {
     "trial_duration_days", "verdict_date", "filing_date", "resolution_date",
     "source", "source_url", "source_notes", "confidence_score",
     "completeness_score", "review_status", "reviewer_notes", "scraped_at",
+    "validation_counts", "validated_field_count", "field_evidence",
 }
 
 
@@ -119,7 +121,20 @@ def load_file(path: Path, client: httpx.Client | None, dry_run: bool) -> dict:
     rejects: list[dict] = []
     warn = 0
     for original in rows:
-        mapped = map_candidate_to_verdict(original)
+        # Gate 1: no-fabrication — strip any field not verbatim-backed by
+        # evidence + source_url; reject records lacking identity/provenance.
+        gate = verify_record(original)
+        if gate["rejected"]:
+            rejects.append({"case_name": original.get("case_name"),
+                            "errors": [f"no-fabrication: {r}" for r in gate["reject_reasons"]],
+                            "record": original})
+            continue
+        verified = gate["record"]
+        mapped = map_candidate_to_verdict(verified)
+        mapped["validation_counts"] = gate["validation_counts"]
+        mapped["validated_field_count"] = gate["validated_total"]
+        mapped["field_evidence"] = gate["evidence"]
+        # Gate 2: enum/format/bounds validation.
         clean, errors, warnings = normalize_and_validate(mapped)
         warn += len(warnings)
         if clean is None:

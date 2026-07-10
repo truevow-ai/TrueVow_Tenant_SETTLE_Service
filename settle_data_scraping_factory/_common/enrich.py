@@ -299,6 +299,30 @@ def extract_carrier(text: str) -> Optional[str]:
     return " ".join(words)
 
 
+def _extract_carrier_with_snippet(text: str) -> tuple[Optional[str], Optional[str]]:
+    """Return (carrier, source_snippet). The snippet is the verbatim context in
+    which the carrier was found, so the value is verifiable word-by-word."""
+    if not text:
+        return None, None
+    for m in _KNOWN_CARRIERS_RE.finditer(text):
+        key = m.group(1).lower()
+        if key in _AMBIGUOUS_CARRIERS and not _carrier_in_context(text, m.start(), m.end()):
+            continue
+        return _KNOWN_CARRIERS[key], _snippet(text, m.start(), m.end())
+    m = _INSURANCE_RE.search(text)
+    if not m:
+        return None, None
+    candidate = m.group(1).strip().rstrip(".,;")
+    words = candidate.split()
+    if len(candidate) < 3 or candidate.lower() in _CARRIER_STOPWORDS:
+        return None, None
+    if words and (words[0].lower() in _CARRIER_STOPWORDS or not words[0][:1].isupper()):
+        words = words[1:]
+    if not words:
+        return None, None
+    return " ".join(words), _snippet(text, m.start(), m.end())
+
+
 # Suffixes that make a standalone value credible as a company name.
 _CARRIER_SUFFIX_RE = re.compile(
     r"\b(?:Insurance|Ins\.?|Indemnity|Casualty|Assurance|Mutual|Underwriters|"
@@ -467,10 +491,12 @@ def _best_amount(text: str, pattern: re.Pattern) -> tuple[Optional[float], Optio
 @dataclass
 class EnrichedFields:
     judge_name: Optional[str] = None
+    judge_name_snippet: Optional[str] = None
     panel: list[str] = field(default_factory=list)
     medical_bills: Optional[float] = None
     medical_bills_snippet: Optional[str] = None
     future_medical: Optional[float] = None
+    future_medical_snippet: Optional[str] = None
     economic_damages: Optional[float] = None
     economic_damages_snippet: Optional[str] = None
     non_economic_damages: Optional[float] = None
@@ -480,18 +506,29 @@ class EnrichedFields:
     lost_wages: Optional[float] = None
     lost_wages_snippet: Optional[str] = None
     plaintiff_age_range: Optional[str] = None
+    plaintiff_age_range_snippet: Optional[str] = None
     trial_duration_days: Optional[int] = None
+    trial_duration_days_snippet: Optional[str] = None
     expert_witnesses_plaintiff: Optional[int] = None
+    expert_witnesses_plaintiff_snippet: Optional[str] = None
     expert_witnesses_defense: Optional[int] = None
+    expert_witnesses_defense_snippet: Optional[str] = None
     total_expert_witnesses: Optional[int] = None
     defendant_category: Optional[str] = None
+    defendant_category_snippet: Optional[str] = None
     defendant_industry: Optional[str] = None
     insurance_carrier: Optional[str] = None
+    insurance_carrier_snippet: Optional[str] = None
     policy_limit_indicator: Optional[str] = None
+    policy_limit_indicator_snippet: Optional[str] = None
     verdict_date: Optional[str] = None
+    verdict_date_snippet: Optional[str] = None
     filing_date: Optional[str] = None
+    filing_date_snippet: Optional[str] = None
     comparative_negligence_pct: Optional[float] = None
+    comparative_negligence_pct_snippet: Optional[str] = None
     liability_tier: Optional[str] = None
+    liability_tier_snippet: Optional[str] = None
 
     def to_dict(self) -> dict:
         d = {}
@@ -510,11 +547,13 @@ def enrich(text: str, case_type: Optional[str] = None) -> EnrichedFields:
     m = _JUDGE_RE.search(text)
     if m:
         ef.judge_name = f"{m.group(1).strip()} {m.group(2)}"
+        ef.judge_name_snippet = _snippet(text, m.start(), m.end())
 
     if ef.judge_name is None:
         m = _JUDGE_TEXT_RE.search(text)
         if m:
             ef.judge_name = m.group(1).strip()
+            ef.judge_name_snippet = _snippet(text, m.start(), m.end())
 
     panel_m = _JUDGE_SITTING_RE.search(text[:600])
     if panel_m:
@@ -525,9 +564,10 @@ def enrich(text: str, case_type: Optional[str] = None) -> EnrichedFields:
         ef.medical_bills = med_val
         ef.medical_bills_snippet = med_snip
 
-    fut_val, _ = _best_amount(text, _MEDICAL_FUTURE_RE)
+    fut_val, fut_snip = _best_amount(text, _MEDICAL_FUTURE_RE)
     if fut_val:
         ef.future_medical = fut_val
+        ef.future_medical_snippet = fut_snip
 
     econ_val, econ_snip = _best_amount(text, _ECONOMIC_RE)
     if econ_val is None:
@@ -579,6 +619,7 @@ def enrich(text: str, case_type: Optional[str] = None) -> EnrichedFields:
                 ef.plaintiff_age_range = "60_74"
             else:
                 ef.plaintiff_age_range = "75_plus"
+            ef.plaintiff_age_range_snippet = _snippet(text, age_m.start(), age_m.end())
 
     td_m = _TRIAL_DURATION_RE.search(text)
     if td_m is None:
@@ -587,34 +628,52 @@ def enrich(text: str, case_type: Optional[str] = None) -> EnrichedFields:
         days = int(td_m.group(1))
         if 0 < days < 1000:
             ef.trial_duration_days = days
+            ef.trial_duration_days_snippet = _snippet(text, td_m.start(), td_m.end())
 
+    # Expert witnesses: report ONLY counts explicitly attributable to a side,
+    # each with a source snippet. NEVER guess or split a total (no-fabrication).
+    pl_matches = list(_EXPERT_PLAINTIFF_RE.finditer(text))
+    df_matches = list(_EXPERT_DEFENSE_RE.finditer(text))
     all_experts = len(_EXPERT_RE.findall(text))
     if all_experts > 0:
         ef.total_expert_witnesses = all_experts
-        ef.expert_witnesses_plaintiff = len(_EXPERT_PLAINTIFF_RE.findall(text))
-        ef.expert_witnesses_defense = len(_EXPERT_DEFENSE_RE.findall(text))
-        if ef.expert_witnesses_plaintiff == 0 and ef.expert_witnesses_defense == 0:
-            ef.expert_witnesses_plaintiff = max(1, all_experts // 2)
-            ef.expert_witnesses_defense = max(1, all_experts - ef.expert_witnesses_plaintiff)
+    if pl_matches:
+        ef.expert_witnesses_plaintiff = len(pl_matches)
+        m0 = pl_matches[0]
+        ef.expert_witnesses_plaintiff_snippet = _snippet(text, m0.start(), m0.end())
+    if df_matches:
+        ef.expert_witnesses_defense = len(df_matches)
+        m0 = df_matches[0]
+        ef.expert_witnesses_defense_snippet = _snippet(text, m0.start(), m0.end())
 
-    carrier = extract_carrier(text)
+    carrier, carrier_snip = _extract_carrier_with_snippet(text)
     if carrier:
         ef.insurance_carrier = carrier
+        ef.insurance_carrier_snippet = carrier_snip
 
     text_low = text.lower()
     for category, patterns in _DEFENDANT_CATEGORY_MAP.items():
-        if any(re.search(p, text_low) for p in patterns):
+        cat_match = None
+        for p in patterns:
+            cat_match = re.search(p, text_low)
+            if cat_match:
+                break
+        if cat_match:
             if ef.defendant_category is None:
                 ef.defendant_category = category
+                ef.defendant_category_snippet = _snippet(text, cat_match.start(), cat_match.end())
             else:
                 if case_type and category == "manufacturer" and case_type == "product_liability":
                     ef.defendant_category = category
+                    ef.defendant_category_snippet = _snippet(text, cat_match.start(), cat_match.end())
                     ef.defendant_industry = "manufacturing"
                 elif case_type and category == "insurance_company" and case_type in ("motor_vehicle_accident", "wrongful_death"):
                     ef.defendant_category = category
+                    ef.defendant_category_snippet = _snippet(text, cat_match.start(), cat_match.end())
                     ef.defendant_industry = "insurance"
                 elif category not in ("individual", "corporation"):
                     ef.defendant_category = category
+                    ef.defendant_category_snippet = _snippet(text, cat_match.start(), cat_match.end())
                     ef.defendant_industry = category
 
     if ef.defendant_industry is None and ef.defendant_category:
@@ -631,16 +690,19 @@ def enrich(text: str, case_type: Optional[str] = None) -> EnrichedFields:
     pol_m = _POLICY_LIMIT_RE.search(text)
     if pol_m:
         ef.policy_limit_indicator = f"mentioned: {pol_m.group(0)[:80]}"
+        ef.policy_limit_indicator_snippet = _snippet(text, pol_m.start(), pol_m.end())
 
     filed_m = _FILED_DATE_CTX.search(text)
     if filed_m:
         ef.filing_date = f"{filed_m.group(1)} {filed_m.group(2)}, {filed_m.group(3)}"
+        ef.filing_date_snippet = _snippet(text, filed_m.start(), filed_m.end())
 
     verdict_m = _VERDICT_DATE_CTX.search(text)
     if verdict_m is None:
         verdict_m = _VERDICT_RETURNED_RE.search(text)
     if verdict_m:
         ef.verdict_date = f"{verdict_m.group(1)} {verdict_m.group(2)}, {verdict_m.group(3)}"
+        ef.verdict_date_snippet = _snippet(text, verdict_m.start(), verdict_m.end())
 
     cn_m = _COMP_NEG_PLAINTIFF_RE.search(text)
     if cn_m is None:
@@ -649,18 +711,27 @@ def enrich(text: str, case_type: Optional[str] = None) -> EnrichedFields:
         pct = float(cn_m.group(1))
         if 0 <= pct <= 100:
             ef.comparative_negligence_pct = pct
+            ef.comparative_negligence_pct_snippet = _snippet(text, cn_m.start(), cn_m.end())
 
-    if _LIABILITY_CLEAR_RE.search(text):
+    liab_m = _LIABILITY_CLEAR_RE.search(text)
+    if liab_m:
         ef.liability_tier = "clear_liability"
-    elif _LIABILITY_DISPUTED_RE.search(text):
-        ef.liability_tier = "disputed_liability"
-    elif cn_m and ef.comparative_negligence_pct is not None:
-        if ef.comparative_negligence_pct <= 20:
-            ef.liability_tier = "likely_liable"
-        elif ef.comparative_negligence_pct <= 50:
-            ef.liability_tier = "shared_liability"
-        else:
-            ef.liability_tier = "likely_not_liable"
+        ef.liability_tier_snippet = _snippet(text, liab_m.start(), liab_m.end())
+    else:
+        liab_m = _LIABILITY_DISPUTED_RE.search(text)
+        if liab_m:
+            ef.liability_tier = "disputed_liability"
+            ef.liability_tier_snippet = _snippet(text, liab_m.start(), liab_m.end())
+        elif cn_m and ef.comparative_negligence_pct is not None:
+            # Derived from comparative-negligence %, so its evidence is the
+            # comp-neg snippet (transparent about the derivation).
+            if ef.comparative_negligence_pct <= 20:
+                ef.liability_tier = "likely_liable"
+            elif ef.comparative_negligence_pct <= 50:
+                ef.liability_tier = "shared_liability"
+            else:
+                ef.liability_tier = "likely_not_liable"
+            ef.liability_tier_snippet = _snippet(text, cn_m.start(), cn_m.end())
 
     return ef
 
