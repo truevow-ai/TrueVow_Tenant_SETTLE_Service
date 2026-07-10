@@ -32,9 +32,11 @@ _THIS_DIR = Path(__file__).resolve().parent
 _FACTORY_ROOT = _THIS_DIR.parent
 _SKILL_DIR = (_FACTORY_ROOT.parent / "scripts" / "scraping-factory" / "insurance-carrier").resolve()
 
-for _p in (str(_FACTORY_ROOT), str(_SKILL_DIR)):
+for _p in (str(_FACTORY_ROOT), str(_SKILL_DIR), str(_THIS_DIR)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+from cis_fabrication_gate import verify_carrier_fact  # noqa: E402
 
 OUT_DIR = _THIS_DIR / "out"
 
@@ -150,15 +152,36 @@ def write_carrier_output(results: dict, dry_run: bool) -> Optional[Path]:
     if dry_run:
         return None
     carrier_dir.mkdir(parents=True, exist_ok=True)
+
+    # No-fabrication gate (AGENTS.md RULE 0): every carrier fact must trace to a
+    # source_url with sha256 integrity + valid identity + in-bounds numbers.
+    # Facts that fail are quarantined, never written to the facts file.
+    verified_facts = []
+    rejects = []
+    for fact in results["facts"]:
+        gate = verify_carrier_fact(fact)
+        if gate["ok"]:
+            f = dict(fact)
+            f["validated_field_count"] = gate["validated_fields"]
+            f["field_evidence"] = gate["evidence"]
+            verified_facts.append(f)
+        else:
+            rejects.append({"entity_name": fact.get("entity_name"),
+                            "kind": fact.get("kind"), "reasons": gate["reasons"], "fact": fact})
+
+    results["verified_facts"] = len(verified_facts)
+    results["rejected_facts"] = len(rejects)
+
     out_path = carrier_dir / f"{slug}_facts.jsonl"
-    # Facts are already canonical CarrierFact dicts; write them verbatim.
-    # (cis_common.write_facts_jsonl would re-wrap dicts and nest each fact
-    # inside value_text, so we serialise directly here.)
+    # Only verified facts are written to the canonical facts file.
     with out_path.open("w", encoding="utf-8") as f:
-        for fact in results["facts"]:
+        for fact in verified_facts:
             f.write(json.dumps(fact, default=str) + "\n")
+    if rejects:
+        (carrier_dir / f"{slug}_facts.rejects.jsonl").write_text(
+            "\n".join(json.dumps(r, default=str) for r in rejects), encoding="utf-8")
     manifest = {k: v for k, v in results.items() if k != "facts"}
-    manifest["fact_count"] = len(results["facts"])
+    manifest["fact_count"] = len(verified_facts)
     (carrier_dir / f"{slug}_manifest.json").write_text(
         json.dumps(manifest, indent=2, default=str), encoding="utf-8"
     )
