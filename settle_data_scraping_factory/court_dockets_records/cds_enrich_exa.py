@@ -120,13 +120,21 @@ def _value_in_snippet(value, snippet: str) -> bool:
     return str(value) in snippet
 
 
-def enrich_exa(c: dict, pairs: Optional[list[tuple[str, str]]] = None) -> dict:
+def enrich_exa(c: dict, pairs: Optional[list[tuple[str, str]]] = None,
+               fields: Optional[set[str]] = None) -> dict:
     """Enrich a candidate with Exa-sourced fields.
 
     Every field written carries: the value, a verbatim source snippet, and the
     source article URL. A value that does not appear verbatim in its snippet is
     dropped. Nothing is guessed or inferred.
+
+    `fields` restricts which fields Exa may fill. Default is the RELIABLE set
+    (carriers + ages) — news-sourced dollar amounts are excluded by policy
+    because news paraphrases them loosely (see prior FL/CA test). Pass an
+    explicit set to override.
     """
+    if fields is None:
+        fields = {"insurance_carrier", "plaintiff_age_range"}
     if pairs is None:
         pairs = search_news(c)
     if not pairs:
@@ -137,7 +145,7 @@ def enrich_exa(c: dict, pairs: Optional[list[tuple[str, str]]] = None) -> dict:
     enriched: dict = {}
 
     def _fill_amount(field: str, regex, snippet_key: str, url_key: str):
-        if c.get(field) or field in enriched:
+        if field not in fields or c.get(field) or field in enriched:
             return
         for text, url in pairs:
             val, snip = _best_amount(text, regex)
@@ -153,7 +161,7 @@ def enrich_exa(c: dict, pairs: Optional[list[tuple[str, str]]] = None) -> dict:
     _fill_amount("non_economic_damages", _NONECONOMIC_RE, "exa_noneconomic_snippet", "exa_noneconomic_url")
     _fill_amount("punitive_damages", _PUNITIVE_RE, "exa_punitive_snippet", "exa_punitive_url")
 
-    if not c.get("insurance_carrier"):
+    if "insurance_carrier" in fields and not c.get("insurance_carrier"):
         for text, url in pairs:
             carrier = extract_carrier(text)
             if carrier:
@@ -166,7 +174,7 @@ def enrich_exa(c: dict, pairs: Optional[list[tuple[str, str]]] = None) -> dict:
                     enriched["exa_insurance_url"] = url
                     break
 
-    if not c.get("plaintiff_age_range"):
+    if "plaintiff_age_range" in fields and not c.get("plaintiff_age_range"):
         for text, url in pairs:
             age_m = (_PLAINTIFF_AGE_RE.search(text) or _AGE_YEARS_OLD_RE.search(text)
                      or _AGE_OF_RE.search(text))
@@ -195,7 +203,7 @@ def enrich_exa(c: dict, pairs: Optional[list[tuple[str, str]]] = None) -> dict:
             enriched["exa_age_url"] = url
             break
 
-    if not c.get("trial_duration_days"):
+    if "trial_duration_days" in fields and not c.get("trial_duration_days"):
         for text, url in pairs:
             td_m = _TRIAL_DURATION_RE.search(text)
             if td_m:
@@ -208,25 +216,35 @@ def enrich_exa(c: dict, pairs: Optional[list[tuple[str, str]]] = None) -> dict:
 
     # Expert-witness counts: report ONLY what is explicitly attributable to a
     # side, each with its snippet. NEVER split a total in half by guessing.
-    for text, url in pairs:
-        pl = _EXPERT_PLAINTIFF_RE.findall(text)
-        df = _EXPERT_DEFENSE_RE.findall(text)
-        if pl and not c.get("expert_witnesses_plaintiff") and "expert_witnesses_plaintiff" not in enriched:
-            enriched["expert_witnesses_plaintiff"] = len(pl)
-            enriched["exa_expert_plaintiff_url"] = url
-        if df and not c.get("expert_witnesses_defense") and "expert_witnesses_defense" not in enriched:
-            enriched["expert_witnesses_defense"] = len(df)
-            enriched["exa_expert_defense_url"] = url
+    if "expert_witnesses_plaintiff" in fields or "expert_witnesses_defense" in fields:
+        for text, url in pairs:
+            pl = _EXPERT_PLAINTIFF_RE.findall(text)
+            df = _EXPERT_DEFENSE_RE.findall(text)
+            if pl and not c.get("expert_witnesses_plaintiff") and "expert_witnesses_plaintiff" not in enriched:
+                enriched["expert_witnesses_plaintiff"] = len(pl)
+                enriched["exa_expert_plaintiff_url"] = url
+            if df and not c.get("expert_witnesses_defense") and "expert_witnesses_defense" not in enriched:
+                enriched["expert_witnesses_defense"] = len(df)
+                enriched["exa_expert_defense_url"] = url
 
     if enriched:
         enriched["_exa_search_used"] = True
     return enriched
 
 
-def enrich_file_exa(in_path: Path, max_cases: int = 0, dry_run: bool = False) -> dict:
-    """Enrich candidates in a JSONL file using Exa news search."""
+def enrich_file_exa(in_path: Path, max_cases: int = 0, dry_run: bool = False,
+                    fields: Optional[set[str]] = None) -> dict:
+    """Enrich candidates in a JSONL file using Exa news search.
+
+    `fields` restricts which fields Exa may fill (default carriers + ages).
+    Candidates that already have every target field are skipped WITHOUT an Exa
+    call, so no API budget is spent where there is nothing to add.
+    """
     if not EXA_API_KEY:
         return {"error": "EXA_API_KEY not set", "input_file": str(in_path)}
+
+    if fields is None:
+        fields = {"insurance_carrier", "plaintiff_age_range"}
 
     rows = []
     for line in in_path.read_text(encoding="utf-8-sig").splitlines():
@@ -240,11 +258,19 @@ def enrich_file_exa(in_path: Path, max_cases: int = 0, dry_run: bool = False) ->
     enriched_rows = []
     enriched_count = 0
     new_field_count = 0
+    searched = 0
+    skipped_complete = 0
 
     for i, c in enumerate(rows):
+        # Skip the Exa call entirely if every target field is already present.
+        if all(c.get(f) for f in fields):
+            enriched_rows.append(c)
+            skipped_complete += 1
+            continue
         pairs = search_news(c)
+        searched += 1
         if pairs:
-            new_fields = enrich_exa(c, pairs)
+            new_fields = enrich_exa(c, pairs, fields=fields)
             if new_fields:
                 enriched_count += 1
                 new_field_count += len([k for k in new_fields if not k.startswith("_") and not k.startswith("exa_")])
@@ -253,7 +279,8 @@ def enrich_file_exa(in_path: Path, max_cases: int = 0, dry_run: bool = False) ->
         if pairs:
             time.sleep(EXA_DELAY)
         if (i + 1) % 20 == 0:
-            print(f"  ... {i+1}/{len(rows)} processed, {enriched_count} enriched so far")
+            print(f"  ... {i+1}/{len(rows)} processed, {enriched_count} enriched, "
+                  f"{skipped_complete} skipped (already complete)")
             sys.stdout.flush()
 
     out_path = in_path.with_name(in_path.stem.replace("_enriched", "") + "_exa_enriched.jsonl" if "_enriched" in in_path.stem else in_path.stem + "_exa.jsonl")
@@ -266,8 +293,11 @@ def enrich_file_exa(in_path: Path, max_cases: int = 0, dry_run: bool = False) ->
         "input_file": str(in_path),
         "output_file": str(out_path),
         "total_rows": len(rows),
+        "exa_searched": searched,
+        "skipped_complete": skipped_complete,
         "exa_enriched": enriched_count,
         "new_fields_added": new_field_count,
+        "fields_scope": sorted(fields),
         "mode": "dry_run" if dry_run else "live",
     }
 
@@ -303,7 +333,10 @@ def selftest() -> int:
         "After a 10-day trial, the jury found the defendant negligent.",
         "https://news.example.com/verdict-smith-jones",
     )]
-    ef = enrich_exa(candidate, pairs=mock)
+    ALL = {"medical_bills", "lost_wages", "economic_damages", "non_economic_damages",
+           "punitive_damages", "insurance_carrier", "plaintiff_age_range",
+           "trial_duration_days", "expert_witnesses_plaintiff", "expert_witnesses_defense"}
+    ef = enrich_exa(candidate, pairs=mock, fields=ALL)
     check("medical_bills from exa", ef.get("medical_bills") == 320000.0)
     check("medical_bills carries snippet", "320,000" in str(ef.get("exa_medical_bills_snippet", "")))
     check("medical_bills carries source url", ef.get("exa_medical_bills_url", "").startswith("https://"))
@@ -316,11 +349,19 @@ def selftest() -> int:
     check("trial_duration carries snippet", "10" in str(ef.get("exa_trial_duration_snippet", "")))
     check("exa flag set", ef.get("_exa_search_used") is True)
 
+    print("DEFAULT scope is carriers + ages ONLY (news amounts excluded by policy):")
+    ef_def = enrich_exa(dict(candidate), pairs=mock)
+    check("default fills carrier", ef_def.get("insurance_carrier") is not None)
+    check("default fills age", ef_def.get("plaintiff_age_range") == "30_44")
+    check("default does NOT fill medical_bills", ef_def.get("medical_bills") is None)
+    check("default does NOT fill lost_wages", ef_def.get("lost_wages") is None)
+    check("default does NOT fill trial_duration", ef_def.get("trial_duration_days") is None)
+
     print("NEVER guess: unattributable value not in snippet is dropped:")
     # A snippet that names a figure with no verbatim digits must not yield a number.
     liar = [("The plaintiff received a substantial but undisclosed settlement.",
              "https://news.example.com/x")]
-    ef_liar = enrich_exa(dict(candidate), pairs=liar)
+    ef_liar = enrich_exa(dict(candidate), pairs=liar, fields=ALL)
     check("no fabricated medical_bills", ef_liar.get("medical_bills") is None)
     check("no fabricated amount at all", not any(k in ef_liar for k in
           ("medical_bills", "lost_wages", "economic_damages", "settlement_amount")))
@@ -328,13 +369,13 @@ def selftest() -> int:
     print("NEVER guess: expert counts are never split from a total:")
     experts = [("Three experts testified at trial about the injuries.",
                 "https://news.example.com/e")]
-    ef_exp = enrich_exa(dict(candidate), pairs=experts)
+    ef_exp = enrich_exa(dict(candidate), pairs=experts, fields=ALL)
     check("no guessed plaintiff expert count", ef_exp.get("expert_witnesses_plaintiff") is None)
     check("no guessed defense expert count", ef_exp.get("expert_witnesses_defense") is None)
 
     print("No override of existing fields:")
     pre_filled = dict(candidate, medical_bills=999999.0, insurance_carrier="Geico")
-    ef2 = enrich_exa(pre_filled, pairs=mock)
+    ef2 = enrich_exa(pre_filled, pairs=mock, fields=ALL)
     check("existing medical_bills not overwritten", ef2.get("medical_bills") is None or ef2.get("medical_bills") == 999999.0)
     check("existing insurance not overwritten", ef2.get("insurance_carrier") is None or ef2.get("insurance_carrier") == "Geico")
 
@@ -349,6 +390,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Exa news enrichment for verdict candidates")
     ap.add_argument("--in", dest="in_path", help="Input JSONL file (enriched candidates)")
     ap.add_argument("--max", type=int, default=0, help="Max cases to process")
+    ap.add_argument("--fields", default="insurance_carrier,plaintiff_age_range",
+                    help="Comma-separated fields Exa may fill (default: carriers+ages; "
+                         "news amounts excluded by policy)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
@@ -359,7 +403,8 @@ def main() -> int:
     if not args.in_path:
         ap.error("--in required (or --selftest)")
 
-    res = enrich_file_exa(Path(args.in_path), max_cases=args.max, dry_run=args.dry_run)
+    fields = {f.strip() for f in args.fields.split(",") if f.strip()}
+    res = enrich_file_exa(Path(args.in_path), max_cases=args.max, dry_run=args.dry_run, fields=fields)
     print(json.dumps(res, indent=2, default=str))
     return 0
 
