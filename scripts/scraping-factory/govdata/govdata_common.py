@@ -17,9 +17,10 @@ import csv
 import hashlib
 import json
 import os
+import re
 import sys
 import time
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -185,7 +186,7 @@ class StaleDataError(RuntimeError):
 
 
 def days_since(timestamp: str) -> float:
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timezone
     try:
         dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         return (datetime.now(timezone.utc) - dt).total_seconds() / 86400
@@ -254,6 +255,61 @@ def write_jsonl(rows: Iterable[SettleRow], path: str) -> int:
             f.write(json.dumps(r.to_dict(), default=str) + "\n")
             count += 1
     return count
+
+
+_HTTP_RE = re.compile(r"^https?://")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def verify_source_row(row: "SettleRow | dict") -> tuple[bool, list[str]]:
+    """No-fabrication evidence gate for govdata rows (AGENTS.md RULE 0).
+
+    A row may enter the database only if it traces to a real source with
+    integrity proof and a value payload:
+        - http(s) source_url
+        - value_text present (the verbatim source payload)
+        - source_sha256 present and well-formed (integrity)
+        - a source_dataset (which authoritative dataset it came from)
+        - an entity identity (id or name)
+    Nothing is guessed or defaulted; failing rows are rejected.
+    """
+    d = row.to_dict() if isinstance(row, SettleRow) else dict(row)
+    reasons: list[str] = []
+    if not _HTTP_RE.match(str(d.get("source_url", ""))):
+        reasons.append("no/invalid source_url")
+    if not d.get("value_text"):
+        reasons.append("no value_text (evidence payload)")
+    if not _SHA256_RE.match(str(d.get("source_sha256", ""))):
+        reasons.append("missing/invalid source_sha256")
+    if not d.get("source_dataset"):
+        reasons.append("no source_dataset")
+    if not (str(d.get("entity_id", "")).strip() or str(d.get("entity_name", "")).strip()):
+        reasons.append("no entity identity")
+    return (not reasons), reasons
+
+
+def verify_and_write_jsonl(rows: Iterable[SettleRow], path: str) -> dict:
+    """Write ONLY rows that pass the no-fabrication gate; quarantine the rest.
+
+    Returns {written, rejected, rejects_file}. Every govdata pipeline MUST use
+    this (not raw write_jsonl) before its output can reach the database.
+    """
+    verified, rejects = [], []
+    for r in rows:
+        ok, reasons = verify_source_row(r)
+        (verified if ok else rejects).append((r, reasons))
+    with open(path, "w", encoding="utf-8") as f:
+        for r, _ in verified:
+            f.write(json.dumps(r.to_dict(), default=str) + "\n")
+    rejects_file = None
+    if rejects:
+        rejects_file = path.rsplit(".", 1)[0] + ".rejects.jsonl"
+        with open(rejects_file, "w", encoding="utf-8") as f:
+            for r, reasons in rejects:
+                d = r.to_dict() if isinstance(r, SettleRow) else dict(r)
+                d["_reject_reasons"] = reasons
+                f.write(json.dumps(d, default=str) + "\n")
+    return {"written": len(verified), "rejected": len(rejects), "rejects_file": rejects_file}
 
 
 STATE_FIPS: dict[str, str] = {
