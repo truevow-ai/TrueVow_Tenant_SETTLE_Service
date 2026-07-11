@@ -580,8 +580,12 @@ class SettlementEstimator:
         p95 = float(self._weighted_percentile(amounts, weights, 95))
         
         # Step 3: Adjust for medical bills (if needed)
-        avg_medical_bills = np.mean([case.medical_bills for case in cases])
-        if avg_medical_bills > 0:
+        # Average only over cases that actually recorded medical_bills — many
+        # verified verdicts do not state medical specials, and those are stored
+        # as NULL (no fabrication). np.mean([]) -> nan, so guard explicitly.
+        _med_vals = [c.medical_bills for c in cases if c.medical_bills is not None and c.medical_bills > 0]
+        avg_medical_bills = float(np.mean(_med_vals)) if _med_vals else 0.0
+        if avg_medical_bills > 0 and medical_bills:
             adjustment_ratio = medical_bills / avg_medical_bills
             if adjustment_ratio < 0.5 or adjustment_ratio > 2.0:
                 adjustment_factor = 1.0 + (adjustment_ratio - 1.0) * 0.5
