@@ -3,6 +3,14 @@ Seed Database via Supabase Client Library
 Alternative method if direct PostgreSQL connection fails
 """
 
+# --- DISABLED: ungated pre-factory script (AGENTS.md RULE 0). See _killswitch.py ---
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from _killswitch import abort_if_killed as _abort
+_abort()
+# --- end kill-switch ---
+
+
 import json
 import os
 from datetime import datetime

@@ -2,6 +2,14 @@
 Stealth URL extraction from Casemine search results
 Uses anti-blocking strategies to extract all case URLs
 """
+
+# --- DISABLED: ungated pre-factory script (AGENTS.md RULE 0). See _killswitch.py ---
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from _killswitch import abort_if_killed as _abort
+_abort()
+# --- end kill-switch ---
+
 import asyncio
 import json
 import logging

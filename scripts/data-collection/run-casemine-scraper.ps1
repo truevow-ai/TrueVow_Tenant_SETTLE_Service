@@ -1,3 +1,6 @@
+# DISABLED - ungated pre-factory scraper (AGENTS.md RULE 0). Use settle_data_scraping_factory.
+Write-Error 'DISABLED: ungated Casemine scraper. Use the gated factory pipeline.'; exit 2
+
 # Casemine Scraper Runner
 # Runs the Casemine scraper with optimized settings for SETTLE database
 
