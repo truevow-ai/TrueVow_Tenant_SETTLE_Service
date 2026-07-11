@@ -11,6 +11,7 @@ from datetime import datetime
 from uuid import UUID
 
 from app.core.database import get_db
+from app.services.verdict_guard import guard_verdict_record
 from app.models.verdicts import (
     VerdictSearchFilter,
     VerdictSearchResult,
@@ -359,6 +360,12 @@ async def create_verdict(data: VerdictCreateRequest, source: str = "manual_entry
     insert_data["confidence_score"] = 0.5
     insert_data["completeness_score"] = _calculate_completeness(insert_data)
 
+    # MANDATORY no-fabrication gate — even manual admin entries must pass.
+    guarded, guard_errors = guard_verdict_record(insert_data)
+    if guarded is None:
+        raise ValueError(f"Verdict rejected by no-fabrication gate: {guard_errors}")
+    insert_data = guarded
+
     result = db.table("settle_verdicts").insert(insert_data).execute()
     return VerdictRecord(**result.data[0])
 
@@ -406,9 +413,20 @@ async def bulk_insert_verdicts(records: List[Dict]) -> Tuple[int, int, int]:
     inserted = 0
     skipped = 0
     failed = 0
+    rejected = 0
 
-    for record in records:
+    for raw_record in records:
         try:
+            # MANDATORY no-fabrication gate (AGENTS.md RULE 0). Every record —
+            # regardless of caller — must pass server-side before it can touch
+            # settle_verdicts. Unverifiable fields are stripped; records without
+            # identity/provenance are rejected outright (never fabricated).
+            record, guard_errors = guard_verdict_record(raw_record)
+            if record is None:
+                rejected += 1
+                logger.warning("bulk_insert_verdicts: record rejected by gate: %s", guard_errors)
+                continue
+
             # Check for duplicates by case_name + jurisdiction + verdict_date
             if record.get("case_name") and record.get("jurisdiction"):
                 dedup_query = db.table("settle_verdicts").select("id").eq("case_name", record["case_name"]).eq("jurisdiction", record["jurisdiction"])
@@ -439,7 +457,9 @@ async def bulk_insert_verdicts(records: List[Dict]) -> Tuple[int, int, int]:
             logger.error(f"Failed to insert verdict record: {e}")
             failed += 1
 
-    return inserted, skipped, failed
+    if rejected:
+        logger.warning("bulk_insert_verdicts: %d record(s) rejected by no-fabrication gate", rejected)
+    return inserted, skipped, failed + rejected
 
 
 def _calculate_completeness(data: Dict) -> float:

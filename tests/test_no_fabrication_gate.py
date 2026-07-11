@@ -118,3 +118,54 @@ def test_no_expert_witness_guessing():
     """The split-a-total-in-half expert guess must not exist in the enricher."""
     src = (_FACTORY / "_common" / "enrich.py").read_text(encoding="utf-8")
     assert "all_experts // 2" not in src
+
+
+# ---- Layer 3: API service insert paths must also be gated -----------------
+
+_APP = Path(__file__).resolve().parent.parent / "app"
+
+
+def test_api_verdict_inserts_route_through_guard():
+    """Every settle_verdicts insert in the API service must be preceded by the
+    server-side no-fabrication guard. This closes the gap where the scraping
+    bulk-insert endpoint / manual create could bypass the file-loader gates."""
+    src = (_APP / "services" / "verdict_search.py").read_text(encoding="utf-8")
+    assert "guard_verdict_record" in src, "verdict_search must import the guard"
+    # Both insert call sites must exist alongside a guard call.
+    assert src.count("guard_verdict_record(") >= 2, (
+        "both bulk_insert_verdicts and create_verdict must call guard_verdict_record"
+    )
+
+
+def test_verdict_guard_behaviour():
+    """The app-native guard enforces the same invariants as the factory gate."""
+    import sys
+    if str(_APP.parent) not in sys.path:
+        sys.path.insert(0, str(_APP.parent))
+    from app.services.verdict_guard import guard_verdict_record
+
+    base = {"jurisdiction": "Miami-Dade, FL", "case_type": "motor_vehicle_accident",
+            "outcome_type": "settlement", "source_url": "https://static.case.law/x"}
+
+    # No provenance -> rejected.
+    r, e = guard_verdict_record({k: v for k, v in base.items() if k != "source_url"})
+    assert r is None and any("provenance" in x for x in e)
+
+    # Amount with no evidence -> stripped, record survives.
+    r2, _ = guard_verdict_record(dict(base, settlement_amount=250000.0))
+    assert r2 is not None and "settlement_amount" not in r2
+
+    # Amount with verbatim evidence -> kept.
+    r3, _ = guard_verdict_record(dict(
+        base, settlement_amount=250000.0,
+        field_evidence={"settlement_amount": {"snippet": "settled for $250,000",
+                                              "source_url": "https://static.case.law/x"}}))
+    assert r3 is not None and r3.get("settlement_amount") == 250000.0
+
+    # Out-of-bounds amount -> rejected.
+    r4, e4 = guard_verdict_record(dict(base, settlement_amount=5_000_000_000.0))
+    assert r4 is None
+
+    # Invalid outcome enum -> rejected.
+    r5, e5 = guard_verdict_record(dict(base, outcome_type="something_made_up"))
+    assert r5 is None
