@@ -1,0 +1,22 @@
+name: Code Review (OpenCodeReview)
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+  push:
+    branches: [master]
+
+jobs:
+  review:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: alibaba/open-code-review@main
+        with:
+          llm_url: ${{ secrets.OPENCODEREVIEW_LLM_URL }}
+          llm_auth_token: ${{ secrets.OPENCODEREVIEW_LLM_AUTH_TOKEN }}
+          llm_model: ${{ vars.OPENCODEREVIEW_LLM_MODEL }}
+          llm_use_anthropic: ${{ vars.OPENCODEREVIEW_LLM_USE_ANTHROPIC }}

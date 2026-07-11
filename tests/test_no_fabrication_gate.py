@@ -13,6 +13,7 @@ Keeping this green is mandatory. If it fails, do NOT relax the assertions —
 fix the code so the gate is enforced.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -191,3 +192,47 @@ def test_no_active_ungated_scraper_seed_scripts():
         for banned in ("seed-via-supabase-client.py", "prepare-for-seeding.py",
                        "scrape-casemine.py", "scrape-casemine-stealth.py"):
             assert banned not in active, f"{banned} must be archived, not active in data-collection"
+
+
+# ---- Layer 5: corroboration promotes only on real multi-source agreement --
+
+def test_corroboration_requires_agreeing_independent_sources():
+    """A verdict is promoted to 'verified' ONLY when >=2 independent sources
+    agree on the amount. Disagreement (or a single source) must NOT promote."""
+    import sys
+    records_dir = _FACTORY / "court_dockets_records"
+    if str(records_dir) not in sys.path:
+        sys.path.insert(0, str(records_dir))
+    import corroborate_verdicts as cv
+
+    def _v(vid, host, cite, amount):
+        return {"id": vid, "case_name": "Harvey v. GEICO",
+                "jurisdiction": "Miami-Dade County, FL",
+                "source_url": f"https://{host}/x", "total_verdict": amount,
+                "settlement_amount": None, "outcome_type": "verdict_plaintiff",
+                "source_notes": json.dumps({"official_citation": cite})}
+
+    # Two independent sources, SAME citation + SAME amount -> corroborated.
+    agree = cv.find_corroborated([
+        _v("A", "static.case.law", "259 So. 3d 1", 9_200_000.0),
+        _v("B", "www.courtlistener.com", "259 So. 3d 1", 9_200_000.0),
+    ])
+    assert "A" in agree and agree["A"]["count"] == 2
+
+    # Same citation but DISAGREEING amounts (20M vs 21M) -> NOT corroborated.
+    disagree = cv.find_corroborated([
+        _v("C", "static.case.law", "273 So. 3d 63", 21_000_000.0),
+        _v("D", "www.courtlistener.com", "273 So. 3d 63", 20_000_000.0),
+    ])
+    assert "C" not in disagree and "D" not in disagree
+
+    # Single source only -> NOT corroborated (no independent agreement).
+    single = cv.find_corroborated([_v("E", "static.case.law", "100 So. 3d 1", 500000.0)])
+    assert "E" not in single
+
+    # Same source twice (same host) -> NOT independent -> NOT corroborated.
+    same = cv.find_corroborated([
+        _v("F", "static.case.law", "101 So. 3d 1", 500000.0),
+        _v("G", "static.case.law", "101 So. 3d 1", 500000.0),
+    ])
+    assert "F" not in same and "G" not in same
