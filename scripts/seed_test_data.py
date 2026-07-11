@@ -354,6 +354,27 @@ def main():
     parser.add_argument('--count', type=int, default=100, help='Number of contributions to generate (default: 100)')
     parser.add_argument('--no-insert', action='store_true', help='Generate data but do not insert into database')
     args = parser.parse_args()
+
+    # --- NO-FABRICATION GUARD (AGENTS.md RULE 0) ---------------------------
+    # This seeder builds contributions with random.uniform() — fabricated data
+    # with no provenance/evidence. It must NEVER write to a real database.
+    # Inserting is permitted ONLY against a local/mock target and ONLY with an
+    # explicit opt-in, so fabricated rows can never reach production and poison
+    # the estimator (this is how the quarantined 2026-05-11 rows got in).
+    if not args.no_insert:
+        import os as _os
+        db_url = (_os.getenv("SETTLE_DATABASE_URL") or "")
+        allow = _os.getenv("SETTLE_ALLOW_TEST_SEED") == "true"
+        is_local = ("localhost" in db_url) or ("127.0.0.1" in db_url)
+        if not (allow and is_local):
+            print(
+                "\nBLOCKED: seed_test_data.py generates FABRICATED (random) data and"
+                "\nmust not insert into a real database (AGENTS.md RULE 0).\n"
+                "Use --no-insert to only generate, or set SETTLE_ALLOW_TEST_SEED=true\n"
+                "with a localhost SETTLE_DATABASE_URL for local testing only.\n"
+            )
+            import sys as _sys
+            _sys.exit(2)
     
     # Generate test contributions
     seeder = TestDataSeeder(num_contributions=args.count)

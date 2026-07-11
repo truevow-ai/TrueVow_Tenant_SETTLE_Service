@@ -169,3 +169,25 @@ def test_verdict_guard_behaviour():
     # Invalid outcome enum -> rejected.
     r5, e5 = guard_verdict_record(dict(base, outcome_type="something_made_up"))
     assert r5 is None
+
+
+# ---- Layer 4: no random-data seeder may write to a real DB unguarded ------
+
+def test_test_data_seeder_is_guarded():
+    """seed_test_data.py fabricates rows with random.uniform(); it must carry a
+    guard that blocks inserts unless target is localhost + explicit opt-in."""
+    seeder = _APP.parent / "scripts" / "seed_test_data.py"
+    if seeder.exists():
+        src = seeder.read_text(encoding="utf-8")
+        assert "SETTLE_ALLOW_TEST_SEED" in src, "test seeder must gate inserts behind explicit local opt-in"
+        assert "random" in src  # sanity: it is indeed a fabricating seeder
+
+
+def test_no_active_ungated_scraper_seed_scripts():
+    """The ungated scrape->prepare->seed pipe must be archived, not active."""
+    dc = _APP.parent / "scripts" / "data-collection"
+    if dc.exists():
+        active = {p.name for p in dc.glob("*.py")}
+        for banned in ("seed-via-supabase-client.py", "prepare-for-seeding.py",
+                       "scrape-casemine.py", "scrape-casemine-stealth.py"):
+            assert banned not in active, f"{banned} must be archived, not active in data-collection"
