@@ -215,15 +215,23 @@ _KNOWN_CARRIERS = {
     "cincinnati insurance": "Cincinnati Insurance",
 }
 
-# Carrier keys that are ordinary English words or place names ("the general
-# rule", "travelers on the road", "nationwide practice", "Hartford,
-# Connecticut", "progressive disease"). They only count as a carrier when an
-# insurance indicator appears nearby, otherwise opinion prose produces
-# hundreds of false positives.
+# Carrier keys that are ordinary English words or place names — long opinion
+# prose produces false matches without insurance-context gating. Any carrier
+# whose name is also a common word (farmers, travelers, sentry, safe co, etc.)
+# or a place name (hartford, zurich) MUST appear here, or it will leak
+# unverified carrier entries into the DB. The Exa test on CA proved this.
 _AMBIGUOUS_CARRIERS = {
     "progressive", "nationwide", "travelers", "farmers", "the general",
     "hartford", "the hartford", "chubb", "kemper", "zurich", "aig", "cna",
     "amica", "root insurance",
+    # CA test (2026-07-11): these matched ordinary words in opinion text without
+    # insurance context, producing false positives in the output:
+    "farmers insurance", "sentry insurance", "sentry", "safeco",
+    "auto-owners", "auto owners", "the hartford", "usaa", "westfield insurance",
+    "cincinnati insurance", "national general", "csaa", "mercury insurance",
+    "esurance", "aaa insurance", "american family", "erie insurance",
+    "berkshire hathaway", "metlife", "state farm", "geico", "allstate",
+    "liberty mutual",
 }
 
 _KNOWN_CARRIERS_RE = re.compile(
@@ -233,7 +241,7 @@ _KNOWN_CARRIERS_RE = re.compile(
 
 # Insurance-context indicator used to gate ambiguous carrier matches.
 _INSURANCE_CONTEXT_RE = re.compile(
-    r"insur|carrier|policy|polic|coverage|underwrit|indemnit|casualty|"
+    r"insur|carrier|policy|polic|cover(?:ed|age)|underwrit|indemnit|casualty|"
     r"insured|assurance|reinsur|no-fault|no fault|uninsured|underinsured|"
     r"liability\s+(?:insurer|carrier|coverage)",
     re.IGNORECASE,
