@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import random
 import time
 from dataclasses import dataclass
@@ -262,3 +263,126 @@ class Fetcher:
 
     def __exit__(self, *exc) -> None:
         self.close()
+
+
+# --- Camofox (stealth browser) parallel engine ---------------------------
+# Gated by SCRAPE_ENGINE=camofox. Same FetchResult interface as Fetcher,
+# so every downstream scraper script works identically regardless of engine.
+# Switches between engines with one env var change — zero code changes needed.
+
+_CAMOFOX_URL = os.environ.get("CAMOFOX_URL", "http://truevow-camofox.fly.dev:9377")
+_CAMOFOX_TIMEOUT = float(os.environ.get("CAMOFOX_TIMEOUT", "30"))
+
+
+class CamofoxFetcher(Fetcher):
+    """Level-1.5 parallel engine — routes HTTP GETs through Camofox stealth browser.
+    Inherits the cache, rate-limiting, retry, and provenance logic from Fetcher.
+    Only overrides the actual network call.
+    """
+
+    def __init__(
+        self,
+        min_delay: float = 2.0,
+        max_retries: int = 3,
+        timeout: float = _CAMOFOX_TIMEOUT,
+        user_agent: str = DEFAULT_USER_AGENT,
+        cache_dir: Optional[Path | str] = None,
+        use_cache: bool = True,
+        jitter: float = 0.4,
+    ) -> None:
+        super().__init__(
+            min_delay=min_delay, max_retries=max_retries, timeout=timeout,
+            user_agent=user_agent, cache_dir=cache_dir, use_cache=use_cache,
+            jitter=jitter,
+        )
+        self._camo_client = httpx.Client(
+            base_url=_CAMOFOX_URL.rstrip("/"),
+            timeout=timeout,
+        )
+
+    def _camo_get(self, full_url: str) -> FetchResult:
+        """Fetch a URL through Camofox's REST API: create tab → snapshot → close."""
+        user_id = f"settle-{hashlib.sha256(full_url.encode()).hexdigest()[:12]}"
+        tab_id = None
+        try:
+            create_resp = self._camo_client.post(
+                "/tabs",
+                json={"userId": user_id, "sessionKey": "scrape", "url": full_url},
+            )
+            create_resp.raise_for_status()
+            tab_id = create_resp.json()["tabId"]
+            time.sleep(1.5)
+            snap_resp = self._camo_client.get(
+                f"/tabs/{tab_id}/snapshot",
+                params={"userId": user_id},
+                headers={"Accept": "text/plain"},
+            )
+            snap_resp.raise_for_status()
+            data = snap_resp.json()
+            content = data.get("snapshot", "").encode("utf-8")
+            return FetchResult(
+                url=full_url,
+                status_code=200,
+                content=content,
+                sha256=hashlib.sha256(content).hexdigest(),
+                fetched_at=_utc_now_iso(),
+                from_cache=False,
+                content_type="text/plain; charset=utf-8",
+            )
+        except Exception:
+            raise
+        finally:
+            if tab_id:
+                try:
+                    self._camo_client.delete(f"/tabs/{tab_id}", params={"userId": user_id})
+                except Exception:
+                    pass
+
+    def get(
+        self,
+        url: str,
+        params: Optional[dict] = None,
+        headers: Optional[dict] = None,
+    ) -> FetchResult:
+        full_url = _full_url(url, params)
+        cached = self._read_cache(full_url)
+        if cached is not None:
+            logger.info("CACHE HIT %s", full_url)
+            return cached
+
+        last_exc: Optional[Exception] = None
+        for attempt in range(self.max_retries + 1):
+            self._respect_rate_limit()
+            self._last_request_ts = time.monotonic()
+            try:
+                res = self._camo_get(full_url)
+                self._write_cache(res)
+                logger.info("OK (camofox) %s (%s bytes)", full_url, len(res.content))
+                return res
+            except Exception as e:
+                last_exc = e
+                if attempt >= self.max_retries:
+                    break
+                backoff = (2 ** attempt) + random.uniform(0, self.jitter)
+                logger.warning(
+                    "Camofox fetch failed (attempt %d/%d) for %s: %s — retrying in %.1fs",
+                    attempt + 1, self.max_retries + 1, full_url, e, backoff,
+                )
+                time.sleep(backoff)
+
+        raise RuntimeError(f"Camofox fetch failed after {self.max_retries + 1} attempts: {full_url}") from last_exc
+
+    def close(self) -> None:
+        super().close()
+        self._camo_client.close()
+
+
+# --- Factory: pick engine by env var ------------------------------------
+# Default is 'http' (existing Fetcher, unchanged behavior).
+# Set SCRAPE_ENGINE=camofox to route through the stealth browser.
+
+def create_fetcher(**kwargs) -> Fetcher:
+    engine = os.environ.get("SCRAPE_ENGINE", "http")
+    if engine == "camofox":
+        return CamofoxFetcher(**kwargs)
+    return Fetcher(**kwargs)
