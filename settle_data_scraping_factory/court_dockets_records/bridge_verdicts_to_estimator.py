@@ -40,7 +40,7 @@ load_dotenv(".env.local")
 
 DB_URL = (os.getenv("SETTLE_DATABASE_URL") or "").rstrip("/")
 DB_KEY = os.getenv("SETTLE_DATABASE_SERVICE_ROLE_KEY") or os.getenv("SETTLE_DATABASE_API_SECRET_KEY")
-_SRC = "verified_verdict"
+_SRC = "scraped_verdict"  # allowed by valid_source_type CHECK; marks bridged rows
 
 # Verdict snake_case -> app display vocabulary (VALID_CASE_TYPES). Label-only.
 _CASE_TYPE_MAP = {
@@ -65,6 +65,27 @@ def _headers(extra: dict | None = None) -> dict:
     if extra:
         h.update(extra)
     return h
+
+
+def _band(amount: float) -> str:
+    """Bucket a VERIFIED exact amount into the app's VALID_OUTCOME_RANGES.
+    Faithful normalization of a known number — not a fabricated estimate."""
+    a = amount
+    if a < 50_000:
+        return "$0-$50k"
+    if a < 100_000:
+        return "$50k-$100k"
+    if a < 150_000:
+        return "$100k-$150k"
+    if a < 225_000:
+        return "$150k-$225k"
+    if a < 300_000:
+        return "$225k-$300k"
+    if a < 600_000:
+        return "$300k-$600k"
+    if a < 1_000_000:
+        return "$600k-$1M"
+    return "$1M+"
 
 
 def _fetch_verdicts(client: httpx.Client) -> list[dict]:
@@ -93,6 +114,12 @@ def project(v: dict) -> dict | None:
     amount = v.get("total_verdict") or v.get("settlement_amount")
     if not amount or amount <= 0:
         return None  # no verified amount -> never coerce a band
+    # The contributions table CHECK caps exact_outcome_amount at $100M. Verdicts
+    # that genuinely exceed it (big tobacco/product cases) are real + verified
+    # but cannot be bridged without distorting the amount — so they are skipped.
+    # Never round down or coerce.
+    if amount > 100_000_000:
+        return None
 
     return {
         "jurisdiction": v["jurisdiction"],
@@ -100,11 +127,17 @@ def project(v: dict) -> dict | None:
         "injury_category": v.get("injury_type") or [],
         "outcome_type": ot,
         "exact_outcome_amount": float(amount),
+        # Band DERIVED from the verified exact amount (bucketing a known number
+        # is faithful normalization, not fabrication). The estimator prefers
+        # exact_outcome_amount anyway; the band only satisfies the NOT-NULL col.
+        "outcome_amount_range": _band(float(amount)),
         "is_verdict": v.get("outcome_type") == "verdict_plaintiff",
         "medical_bills": v.get("medical_bills"),
         "insurance_carrier": v.get("insurance_carrier"),
         "comparative_negligence_pct": v.get("comparative_negligence_pct"),
-        "defendant_category": v.get("defendant_category"),
+        # defendant_category is NOT-NULL; 'Unknown' is an honest, valid enum
+        # value (VALID_DEFENDANT_CATEGORIES) — never a guessed category.
+        "defendant_category": v.get("defendant_category") or "Unknown",
         "date_of_verdict": v.get("verdict_date"),
         # Provenance + evidence preserved for audit; distinguishes bridged rows.
         "source_type": _SRC,
@@ -160,6 +193,7 @@ def main() -> int:
         c.delete(f"{DB_URL}/rest/v1/settle_contributions?source_type=eq.{_SRC}",
                  headers=_headers({"Prefer": "return=minimal"}))
         inserted = 0
+        bad_samples = []
         for i in range(0, len(projected), 500):
             chunk = projected[i:i + 500]
             keys: set = set()
@@ -172,7 +206,22 @@ def main() -> int:
             if resp.status_code < 300:
                 inserted += len(chunk)
             else:
-                print(f"  insert HTTP {resp.status_code}: {resp.text[:200]}")
+                # One bad row poisons the batch — retry row-by-row so good rows
+                # land and bad values are isolated (never coerced/fabricated).
+                for r in chunk:
+                    rr = c.post(f"{DB_URL}/rest/v1/settle_contributions",
+                                headers=_headers({"Prefer": "return=minimal"}),
+                                content=json.dumps([r], default=str))
+                    if rr.status_code < 300:
+                        inserted += 1
+                    elif len(bad_samples) < 5:
+                        bad_samples.append((rr.json().get("message", "")[:90],
+                                            {k: r.get(k) for k in ("case_type", "outcome_type",
+                                             "defendant_category", "outcome_amount_range")}))
+        if bad_samples:
+            print("  rows rejected by DB constraints (isolated, not coerced):")
+            for msg, ctx in bad_samples:
+                print(f"    {msg} | {ctx}")
         print(f"\nBRIDGED {inserted} verified verdicts into settle_contributions (source_type={_SRC}).")
         return 0
 
