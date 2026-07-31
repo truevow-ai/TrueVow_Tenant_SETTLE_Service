@@ -342,7 +342,7 @@ def run_all_tests(api_key: str) -> str:
     
     # Test 3: Get Founding Member Status
     print("Test 3: Get Founding Member Status...")
-    member_status = client.test_get_founding_member_status()
+    _ = client.test_get_founding_member_status()
     time.sleep(0.5)
     
     # Test 4: Query Settlement Estimate (Personal Injury)
@@ -365,7 +365,7 @@ def run_all_tests(api_key: str) -> str:
         "injury_category": ["Brain Injury"],
         "severity": "Catastrophic"
     }
-    estimate_2 = client.test_query_estimate(query_data_2)
+    _ = client.test_query_estimate(query_data_2)
     time.sleep(0.5)
     
     # Test 6: Submit Valid Contribution
@@ -380,7 +380,7 @@ def run_all_tests(api_key: str) -> str:
         "case_outcome": "Settled",
         "notes": "Rear-end collision, clear liability, excellent recovery"
     }
-    contribution = client.test_submit_contribution(contribution_data)
+    _ = client.test_submit_contribution(contribution_data)
     time.sleep(0.5)
     
     # Test 7: PHI Detection Test
@@ -397,7 +397,7 @@ def run_all_tests(api_key: str) -> str:
     
     # Test 9: Get My Reports
     print("Test 9: Get My Reports...")
-    reports = client.test_get_my_reports()
+    _ = client.test_get_my_reports()
     time.sleep(0.5)
     
     # Test 10: Join Waitlist (no API key)

@@ -1,8 +1,8 @@
 # SETTLE Service — Implementation Progress
 
-**Last Updated:** 2026-05-19
-**Current Phase:** ALL PHASES COMPLETE (1-5) + E2E infrastructure ready
-**Overall Status:** Backend DONE through Phase 5; 186/186 unit tests PASS; 23/24 DOCKET tests PASS; 14 E2E tests ready; Customer portal Phase 2.1-2.3 UI built and verified
+**Last Updated:** 2026-07-29
+**Current Phase:** Settlement Domain + Shared Foundation + Contract Normalization COMPLETE
+**Overall Status:** 82 tests passing, lint clean
 
 ---
 
@@ -18,6 +18,40 @@
 ---
 
 ## Milestone / Cohort Summary (chronological, newest first)
+
+### Settlement Domain + Shared Foundation + Contract Normalization ✅ DONE
+**Date:** 2026-07-29 · **Status:** DONE
+
+**Settlement Domain (ENT-081 through ENT-106):**
+- `app/models/settlement.py` — 17 Pydantic domain models + AttorneyRecommendation + AuditEvent
+- `app/services/settlement/` — 8 service modules (demand, negotiation, decision, agreement, lien, financial, closure, audit)
+- `app/api/v1/endpoints/settlement.py` — 30 REST endpoints under `/settle/`
+- `alembic/versions/a1b2c3d4e5f6_add_settlement_workflow_tables.py` — 18 settlement-specific tables
+- Tests: 36 tests in `tests/test_settlement_domain.py`
+
+**Shared Foundation (9 cross-product services):**
+- `app/shared/models.py` — 120 canonical ontology types (703 lines)
+- `app/shared/tenant_core.py` — identity, role checks, attorney verification
+- `app/shared/authority_gate.py` — AUTH-001 through AUTH-020, 27 registered actions
+- `app/shared/policy_registry.py` — versioned firm policies, jurisdiction profiles
+- `app/shared/consent_ledger.py` — append-only, 7-state lifecycle (INV-012)
+- `app/shared/document_service.py` — versioned with SHA-256 hashes, signature evidence
+- `app/shared/communication_service.py` — multi-channel, delivery evidence, reminders
+- `app/shared/workflow_runtime.py` — deterministic state transitions, overdue escalation
+- `app/shared/audit_store.py` — EventEnvelope v1.0.1 compliant
+- `app/shared/integration_hub.py` — 12 integration types
+- `alembic/versions/b2c3d4e5f6a7_add_shared_foundation_tables.py` — 25 shared tables
+- Tests: 23 tests in `tests/test_shared_foundation.py`
+
+**Contract Corrections (4 items):**
+- `app/shared/models.py` — EventEnvelope frozen at Literal["1.0.1"], AuditEvent schema_version frozen
+- `app/models/activation.py` — MatterActivationPayload (11 fields), MatterActivationEvidenceManifest (9 mandatory refs)
+- `app/core/service_auth.py` — WebhookSigner/WebhookVerifier aligned to SaaS Admin TypeScript (colon delimiters, path-only, env vars TRUEVOW_WEBHOOK_*)
+- `app/shared/models.py` — TenantJurisdictionActivation model, GLOBAL_REFERENCE_TYPES vs TENANT_OWNED_TYPES constants
+- `app/shared/contracts.py` — Frozen contract versions + golden fixture (make_golden_envelope, compute_golden_hmac)
+- Tests: 9 tests in `tests/test_golden_fixtures.py`
+
+**Total: 82 tests passing, lint clean**
 
 ### Phase 1-5 Complete + E2E Infrastructure ✅ DONE
 **Date:** 2026-05-19 · **Status:** DONE

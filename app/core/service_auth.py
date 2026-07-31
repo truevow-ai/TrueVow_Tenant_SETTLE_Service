@@ -3,18 +3,185 @@ Service-to-Service Authentication Module
 
 Handles authentication and authorization for service-to-service communication
 in the TrueVow 5-service enterprise architecture.
+
+HMAC webhook signing (WebhookSignature v1.0 — frozen contract):
+  Signing string:  timestamp:method:path:body_hash
+  Headers:         X-TrueVow-Key-Id, X-TrueVow-Timestamp, X-TrueVow-Signature
+  Algorithm:       HMAC-SHA256, constant-time comparison
+  Replay window:   5 minutes
+  Key rotation:    TRUEVOW_WEBHOOK_SECONDARY_KEYS env var
+
+This Python implementation MUST produce byte-identical signatures to the
+TypeScript reference at lib/security/webhook-auth.ts in SaaS Admin.
 """
 
+import hashlib
+import hmac
+import json
 import logging
+import os
+import time as time_module
 from typing import Optional, Dict
 from datetime import datetime
 from uuid import uuid4
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, Request, status
 import httpx
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
+WEBHOOK_HASH_ALGORITHM = "sha256"
+
+
+def _load_webhook_secrets() -> Dict[str, str]:
+    """Load webhook secrets from env vars — matches SaaS Admin TypeScript.
+
+    TRUEVOW_WEBHOOK_KEY_ID=tv-primary
+    TRUEVOW_WEBHOOK_SECRET=<shared-secret>
+    TRUEVOW_WEBHOOK_SECONDARY_KEYS=[{"key_id":"tv-secondary","secret":"..."}]
+    """
+    secrets: Dict[str, str] = {}
+    key_id = os.getenv("TRUEVOW_WEBHOOK_KEY_ID", "settle-service")
+    secret = os.getenv("TRUEVOW_WEBHOOK_SECRET", "settle-dev-secret")
+    secrets[key_id] = secret
+
+    secondary = os.getenv("TRUEVOW_WEBHOOK_SECONDARY_KEYS")
+    if secondary:
+        try:
+            for entry in json.loads(secondary):
+                secrets[entry["key_id"]] = entry["secret"]
+        except (json.JSONDecodeError, KeyError):
+            logger.warning("Failed to parse TRUEVOW_WEBHOOK_SECONDARY_KEYS")
+
+    return secrets
+
+
+class WebhookSigner:
+    """Signs outgoing webhook requests with HMAC-SHA256.
+
+    Signing string format (matches TypeScript lib/security/webhook-auth.ts):
+      timestamp:method:path:body_hash
+
+    The path is the URL path only — no host, no query string.
+    This prevents malicious replay to a different endpoint.
+    """
+
+    def __init__(self, key_id: str, secret: str):
+        self.key_id = key_id
+        self._secret = secret.encode()
+
+    def sign(
+        self,
+        method: str,
+        path: str,
+        body_bytes: bytes,
+        timestamp: Optional[int] = None,
+    ) -> Dict[str, str]:
+        ts = str(timestamp or int(time_module.time()))
+        body_hash = hashlib.sha256(body_bytes).hexdigest()
+        signing_string = f"{ts}:{method.upper()}:{path}:{body_hash}"
+        signature = hmac.new(self._secret, signing_string.encode(), hashlib.sha256).hexdigest()
+
+        return {
+            "X-TrueVow-Key-Id": self.key_id,
+            "X-TrueVow-Timestamp": ts,
+            "X-TrueVow-Signature": signature,
+        }
+
+    def sign_request(self, method: str, path: str, body: Optional[bytes] = None) -> Dict[str, str]:
+        """Sign a request. path is URL path only (no host, no query string)."""
+        return self.sign(method=method, path=path, body_bytes=body or b"")
+
+
+class WebhookVerifier:
+    """Verifies incoming webhook signatures.
+
+    Usage as FastAPI dependency:
+        verifier = get_webhook_verifier()
+
+        @router.post("/webhook/matter-activated")
+        async def handle_webhook(
+            request: Request,
+            verified = Depends(verifier),
+        ):
+            ...
+    """
+
+    def __init__(
+        self,
+        secrets: Optional[Dict[str, str]] = None,
+        tolerance_seconds: int = WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS,
+    ):
+        self._secrets = {kid: s.encode() for kid, s in (secrets or _load_webhook_secrets()).items()}
+        self._tolerance = tolerance_seconds
+
+    async def __call__(
+        self,
+        request: Request,
+        x_truevow_key_id: Optional[str] = Header(None, alias="X-TrueVow-Key-Id"),
+        x_truevow_timestamp: Optional[str] = Header(None, alias="X-TrueVow-Timestamp"),
+        x_truevow_signature: Optional[str] = Header(None, alias="X-TrueVow-Signature"),
+    ) -> Dict:
+        if settings.SKIP_AUTH or not settings.ENABLE_SERVICE_AUTH:
+            return {"authenticated": False, "bypass_mode": True}
+
+        if not x_truevow_key_id or not x_truevow_timestamp or not x_truevow_signature:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing webhook signing headers: X-TrueVow-Key-Id, X-TrueVow-Timestamp, X-TrueVow-Signature",
+            )
+
+        secret = self._secrets.get(x_truevow_key_id)
+        if secret is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Unknown key ID: {x_truevow_key_id}",
+            )
+
+        try:
+            ts = int(x_truevow_timestamp)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid timestamp format")
+
+        now = int(time_module.time())
+        if abs(now - ts) > self._tolerance:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Webhook timestamp outside tolerance window",
+            )
+
+        raw_body = await request.body()
+        path = request.url.path
+        body_hash = hashlib.sha256(raw_body).hexdigest()
+        signing_string = f"{x_truevow_timestamp}:{request.method.upper()}:{path}:{body_hash}"
+
+        expected = hmac.new(secret, signing_string.encode(), hashlib.sha256).hexdigest()
+
+        if not hmac.compare_digest(expected, x_truevow_signature):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid webhook signature",
+            )
+
+        return {
+            "authenticated": True,
+            "key_id": x_truevow_key_id,
+            "timestamp": ts,
+        }
+
+
+def get_settle_webhook_signer() -> WebhookSigner:
+    """Returns a WebhookSigner configured from env vars (TRUEVOW_WEBHOOK_KEY_ID)."""
+    secrets = _load_webhook_secrets()
+    key_id = os.getenv("TRUEVOW_WEBHOOK_KEY_ID", "settle-service")
+    return WebhookSigner(key_id=key_id, secret=secrets[key_id])
+
+
+def get_webhook_verifier() -> WebhookVerifier:
+    """Returns a WebhookVerifier with secrets from env vars."""
+    return WebhookVerifier()
 
 
 class ServiceAuth:

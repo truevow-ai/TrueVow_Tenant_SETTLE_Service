@@ -3,7 +3,7 @@ API Router for SETTLE Service
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import query, contribute, reports, admin, waitlist, stats, verdicts, carrier_analytics, trend_reports, override_tracking
+from app.api.v1.endpoints import query, contribute, reports, admin, waitlist, stats, verdicts, carrier_analytics, trend_reports, override_tracking, settlement
 
 api_router = APIRouter()
 
@@ -17,6 +17,9 @@ api_router.include_router(contribute.router, prefix="/contribute", tags=["contri
 api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
 api_router.include_router(carrier_analytics.router, tags=["analytics"])
 api_router.include_router(trend_reports.router, prefix="/trends", tags=["trends"])
+
+# Settlement workflow endpoints
+api_router.include_router(settlement.router, tags=["settlement"])
 
 # Admin endpoints (for SaaS Admin platform)
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

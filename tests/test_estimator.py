@@ -88,12 +88,12 @@ async def test_estimator_with_sufficient_cases():
 async def test_estimator_with_insufficient_cases():
     """Test estimator with <15 cases (multiplier fallback)"""
     
-    estimator = SettlementEstimator()
+    _estimator = SettlementEstimator()
     
     # Mock query that returns few cases
     # In production, this would query a jurisdiction with limited data
     
-    request = EstimateRequest(
+    _request = EstimateRequest(
         jurisdiction="Test County, WY",  # Small state
         case_type="Rare Case Type",
         injury_category=["Rare Injury Type"],
