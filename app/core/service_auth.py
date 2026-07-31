@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
 WEBHOOK_HASH_ALGORITHM = "sha256"
 SIGNATURE_HEX_PATTERN = re.compile(r"^[a-f0-9]{64}$")
-LEGACY_AUTH_CUTOFF_DATE = datetime(2026, 10, 1, tzinfo=timezone.utc)
+LEGACY_AUTH_CUTOFF_DATE = datetime(2026, 9, 1, tzinfo=timezone.utc)
 
 _idempotency_store: Dict[str, Set[str]] = {}
 

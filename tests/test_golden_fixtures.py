@@ -334,3 +334,22 @@ class TestWebhookSignatureGoldenFixtures:
         signer = WebhookSigner(key_id=FIXTURE_KEY_ID, secret=secret)
         headers = signer.sign(method="POST", path=path, body_bytes=FIXTURE_BODY, timestamp=int(timestamp))
         assert headers["X-TrueVow-Signature"] == expected
+
+
+class TestLegacyMigration:
+    """Legacy bearer auth tracking and cutoff enforcement."""
+
+    def test_cutoff_date_is_2026_09_01(self):
+        from datetime import datetime, timezone
+        from app.core.service_auth import LEGACY_AUTH_CUTOFF_DATE
+        expected = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        assert LEGACY_AUTH_CUTOFF_DATE == expected
+
+    def test_cutoff_date_is_set_for_future_rejection(self):
+        from datetime import datetime, timezone
+        from app.core.service_auth import LEGACY_AUTH_CUTOFF_DATE
+        expected = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        assert LEGACY_AUTH_CUTOFF_DATE == expected, (
+            f"Legacy cutoff must be 2026-09-01. "
+            f"After this date, verify_legacy_bearer() returns None."
+        )

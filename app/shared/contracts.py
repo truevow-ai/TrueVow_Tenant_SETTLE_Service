@@ -36,6 +36,60 @@ CONTRACT_VERSIONS = {
     "OntologyRegistry": "1.0",
 }
 
+# ============================================================================
+# CANONICAL PATHS — exact URL paths for webhook signing strings
+# ============================================================================
+
+CANONICAL_PATHS = {
+    "intake_to_retainer": "/api/v1/retainer/webhooks/candidate-submitted",
+    "retainer_to_saas_admin": "/api/v1/matters/activate",
+    "saas_admin_to_trace": "/api/v1/trace/webhooks/matter-activated",
+    "trace_to_settle": "/api/v1/settle/webhooks/matter-activated",
+}
+
+# ============================================================================
+# SERVICE WEBHOOK RESPONSIBILITIES — which calls each service signs/verifies
+# ============================================================================
+
+SERVICE_WEBHOOK_RESPONSIBILITIES = {
+    "SETTLE": {
+        "verifies": ["POST /api/v1/settle/webhooks/matter-activated"],
+        "signs": ["POST /api/v1/command/webhooks/resolution-update"],
+    },
+    "INTAKE": {
+        "signs": ["POST /api/v1/retainer/webhooks/candidate-submitted"],
+    },
+    "RETAINER": {
+        "verifies": ["POST /api/v1/retainer/webhooks/candidate-submitted"],
+        "signs": ["POST /api/v1/matters/activate"],
+    },
+    "SAAS_ADMIN": {
+        "verifies": ["POST /api/v1/matters/activate"],
+    },
+    "TRACE": {
+        "verifies": ["POST /api/v1/trace/webhooks/matter-activated"],
+    },
+}
+
+# ============================================================================
+# WEBHOOK SIGNATURE CANONICAL RULES
+# ============================================================================
+
+WEBHOOK_SIGNATURE_CANONICAL_RULES = {
+    "method_case": "UPPERCASE",
+    "path_format": "url_path_only",
+    "include_host": False,
+    "include_query_string": False,
+    "trailing_slash_normalization": False,
+    "body_encoding": "utf-8_raw_bytes",
+    "timestamp_format": "milliseconds_as_string",
+    "hash_output": "lowercase_hex",
+    "hmac_algorithm": "HMAC-SHA256",
+    "signing_string_format": "timestamp:method:path:body_hash",
+    "timestamp_tolerance_seconds": 300,
+    "legacy_cutoff": "2026-09-01",
+}
+
 ENVELOPE_REQUIRED_FIELDS = {
     "event_id", "event_type", "occurred_at", "recorded_at", "tenant_id",
     "aggregate_type", "aggregate_id", "aggregate_version",

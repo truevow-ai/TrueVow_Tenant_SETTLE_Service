@@ -86,12 +86,12 @@ cross-service calls.
 - Resolve secrets strictly by key_id from env vars
 - Development, staging, and production must use different secrets
 - Support primary/secondary key rotation via TRUEVOW_WEBHOOK_SECONDARY_KEYS
-- Legacy bearer auth accepted only during documented migration period (cutoff: 2026-10-01)
+- Legacy bearer auth accepted only during documented migration period (cutoff: 2026-09-01)
 - Record auth_source on every verification (hmac/legacy/bypass)
 
 ### Migration tracking:
 - Auth source logged on every verification
-- Legacy bearer auth deprecated after 2026-10-01
+- Legacy bearer auth deprecated after 2026-09-01
 - Dual auth (HMAC OR legacy) during migration window
 
 ## RULE 0 — NO-FABRICATION PRIME DIRECTIVE (NON-NEGOTIABLE, NEVER COMPROMISE)
