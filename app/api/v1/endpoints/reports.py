@@ -140,6 +140,17 @@ async def generate_report(
                     "ots_hash": report_hash,
                     "created_at": datetime.now(UTC).isoformat(),
                 }).execute()
+
+                from app.services.billing import billing_emitter
+                from uuid import UUID as UUIDType
+                tenant_id_str = api_key_data.get("tenant_id")
+                if tenant_id_str:
+                    await billing_emitter.emit_report_finalized(
+                        tenant_id=UUIDType(tenant_id_str),
+                        report_id=report_id,
+                        query_id=request.query_id if request.query_id else query_id,
+                        report_type=request.format or "json",
+                    )
             except Exception as e:
                 logger.warning(f"Failed to persist report record: {e}")
         
