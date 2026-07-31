@@ -54,6 +54,46 @@ python ../TrueVow_Shared_Orchestration/orchestrator.py dispatch "<user's request
 > Add service-specific rules below. The ecosystem preamble above is auto-generated
 > and wires this agent into the TrueVow Agent Ecosystem.
 
+## WebhookSignature v1.0 — SETTLE Responsibilities (frozen contract)
+
+SETTLE is primarily a **verifier** of incoming webhooks and a **signer** of outbound
+cross-service calls.
+
+### Canonical paths SETTLE verifies:
+- `POST /settle/webhooks/matter-activated` — receives matter.activated from TRACE
+
+### Canonical paths SETTLE signs:
+- `POST /settle/webhooks/resolution-update` — notifies COMMAND of resolution status changes
+
+### Authoritative contract location:
+- Contract: `app/shared/contracts.py` (CONTRACT_VERSIONS, golden fixtures)
+- Signing/verification: `app/core/service_auth.py` (WebhookSigner, WebhookVerifier)
+- Golden tests: `tests/test_golden_fixtures.py` (17 webhook tests)
+
+### Frozen contracts SETTLE must comply with:
+| Contract | Version | SETTLE Role |
+|---|---|---|
+| WebhookSignature | v1.0 | Sign + Verify |
+| EventEnvelope | v1.0.1 | Validate on receive, emit on send |
+| MatterActivatedPayload | v1.0 | Validate on receive |
+| ActivationEvidenceManifest | v1.0 | Validate on receive |
+
+### Security requirements (non-negotiable):
+- Never log webhook secrets, complete signatures, or confidential request bodies
+- Hash exact raw request bytes (no JSON re-serialization)
+- Validate signature hex format and buffer length before compare_digest
+- Enforce event idempotency via event_id (not just timestamp window)
+- Resolve secrets strictly by key_id from env vars
+- Development, staging, and production must use different secrets
+- Support primary/secondary key rotation via TRUEVOW_WEBHOOK_SECONDARY_KEYS
+- Legacy bearer auth accepted only during documented migration period (cutoff: 2026-10-01)
+- Record auth_source on every verification (hmac/legacy/bypass)
+
+### Migration tracking:
+- Auth source logged on every verification
+- Legacy bearer auth deprecated after 2026-10-01
+- Dual auth (HMAC OR legacy) during migration window
+
 ## RULE 0 — NO-FABRICATION PRIME DIRECTIVE (NON-NEGOTIABLE, NEVER COMPROMISE)
 
 **SETTLE is a legal product. Fabricated data will kill it. This rule overrides

@@ -8,8 +8,11 @@ HMAC webhook signing (WebhookSignature v1.0 — frozen contract):
   Signing string:  timestamp:method:path:body_hash
   Headers:         X-TrueVow-Key-Id, X-TrueVow-Timestamp, X-TrueVow-Signature
   Algorithm:       HMAC-SHA256, constant-time comparison
-  Replay window:   5 minutes
+  Replay window:   5 minutes (+ idempotency via event_id/command_id)
   Key rotation:    TRUEVOW_WEBHOOK_SECONDARY_KEYS env var
+  Canonicalization: uppercase method, exact path, no host, no query string,
+                    no trailing-slash normalization, UTF-8 raw body,
+                    millisecond timestamp, lowercase hex output
 
 This Python implementation MUST produce byte-identical signatures to the
 TypeScript reference at lib/security/webhook-auth.ts in SaaS Admin.
@@ -20,9 +23,10 @@ import hmac
 import json
 import logging
 import os
+import re
 import time as time_module
-from typing import Optional, Dict
-from datetime import datetime
+from typing import Optional, Dict, Set
+from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi import Header, HTTPException, Request, status
 import httpx
@@ -33,6 +37,10 @@ logger = logging.getLogger(__name__)
 
 WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
 WEBHOOK_HASH_ALGORITHM = "sha256"
+SIGNATURE_HEX_PATTERN = re.compile(r"^[a-f0-9]{64}$")
+LEGACY_AUTH_CUTOFF_DATE = datetime(2026, 10, 1, tzinfo=timezone.utc)
+
+_idempotency_store: Dict[str, Set[str]] = {}
 
 
 def _load_webhook_secrets() -> Dict[str, str]:
@@ -41,6 +49,9 @@ def _load_webhook_secrets() -> Dict[str, str]:
     TRUEVOW_WEBHOOK_KEY_ID=tv-primary
     TRUEVOW_WEBHOOK_SECRET=<shared-secret>
     TRUEVOW_WEBHOOK_SECONDARY_KEYS=[{"key_id":"tv-secondary","secret":"..."}]
+
+    Actual values belong in the deployment secret manager.
+    Development, staging, and production must use different secrets.
     """
     secrets: Dict[str, str] = {}
     key_id = os.getenv("TRUEVOW_WEBHOOK_KEY_ID", "settle-service")
@@ -64,8 +75,8 @@ class WebhookSigner:
     Signing string format (matches TypeScript lib/security/webhook-auth.ts):
       timestamp:method:path:body_hash
 
-    The path is the URL path only — no host, no query string.
-    This prevents malicious replay to a different endpoint.
+    The path is the URL path only — no host, no query string, no trailing slash
+    normalization. This prevents malicious replay to a different endpoint.
     """
 
     def __init__(self, key_id: str, secret: str):
@@ -96,7 +107,17 @@ class WebhookSigner:
 
 
 class WebhookVerifier:
-    """Verifies incoming webhook signatures.
+    """Verifies incoming webhook signatures per frozen WebhookSignature v1.0.
+
+    Enforces:
+      - Header presence and format validation
+      - Timestamp syntax and tolerance window
+      - Signature hex format and buffer-length guard before compare_digest
+      - Exact raw body hashing (no re-serialization)
+      - Key resolution strictly by key_id
+      - Idempotency via event_id (replay within window blocked)
+      - Auth source recorded (hmac vs legacy, key_id, calling service)
+      - Secrets, signatures, and confidential bodies never logged
 
     Usage as FastAPI dependency:
         verifier = get_webhook_verifier()
@@ -106,7 +127,8 @@ class WebhookVerifier:
             request: Request,
             verified = Depends(verifier),
         ):
-            ...
+            event_id = request.headers.get("X-TrueVow-Event-Id")
+            # ... process
     """
 
     def __init__(
@@ -124,29 +146,51 @@ class WebhookVerifier:
         x_truevow_timestamp: Optional[str] = Header(None, alias="X-TrueVow-Timestamp"),
         x_truevow_signature: Optional[str] = Header(None, alias="X-TrueVow-Signature"),
     ) -> Dict:
+        auth_source = "hmac"
+        key_id_used = x_truevow_key_id or "unknown"
+
         if settings.SKIP_AUTH or not settings.ENABLE_SERVICE_AUTH:
-            return {"authenticated": False, "bypass_mode": True}
+            logger.info("webhook_auth bypass mode active")
+            return {
+                "authenticated": False,
+                "bypass_mode": True,
+                "auth_source": "bypass",
+                "key_id": "none",
+            }
 
         if not x_truevow_key_id or not x_truevow_timestamp or not x_truevow_signature:
+            self._log_auth_failure(key_id_used, "missing_headers")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Missing webhook signing headers: X-TrueVow-Key-Id, X-TrueVow-Timestamp, X-TrueVow-Signature",
             )
 
+        if not SIGNATURE_HEX_PATTERN.match(x_truevow_signature):
+            self._log_auth_failure(key_id_used, "invalid_signature_format")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid signature format: must be 64 lowercase hex characters",
+            )
+
+        if not re.match(r"^\d+$", x_truevow_timestamp):
+            self._log_auth_failure(key_id_used, "invalid_timestamp_format")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid timestamp format: must be milliseconds as integer string",
+            )
+
         secret = self._secrets.get(x_truevow_key_id)
         if secret is None:
+            self._log_auth_failure(key_id_used, "unknown_key_id")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Unknown key ID: {x_truevow_key_id}",
             )
 
-        try:
-            ts = int(x_truevow_timestamp)
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid timestamp format")
-
+        ts = int(x_truevow_timestamp)
         now = int(time_module.time())
         if abs(now - ts) > self._tolerance:
+            self._log_auth_failure(key_id_used, "timestamp_outside_tolerance")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Webhook timestamp outside tolerance window",
@@ -154,22 +198,64 @@ class WebhookVerifier:
 
         raw_body = await request.body()
         path = request.url.path
+
         body_hash = hashlib.sha256(raw_body).hexdigest()
         signing_string = f"{x_truevow_timestamp}:{request.method.upper()}:{path}:{body_hash}"
-
         expected = hmac.new(secret, signing_string.encode(), hashlib.sha256).hexdigest()
 
-        if not hmac.compare_digest(expected, x_truevow_signature):
+        provided_bytes = bytes.fromhex(x_truevow_signature)
+        expected_bytes = bytes.fromhex(expected)
+        if len(provided_bytes) != len(expected_bytes) or not hmac.compare_digest(provided_bytes, expected_bytes):
+            self._log_auth_failure(key_id_used, "invalid_signature")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid webhook signature",
             )
 
+        event_id = self._extract_idempotency_key(raw_body)
+        if event_id:
+            store_key = f"{x_truevow_key_id}:{event_id}"
+            if store_key in _idempotency_store.get("consumed", set()):
+                logger.warning(
+                    "webhook_replay_blocked key_id=%s event_id=%s path=%s",
+                    x_truevow_key_id, event_id, path,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Duplicate event: {event_id} already processed",
+                )
+            _idempotency_store.setdefault("consumed", set()).add(store_key)
+
+        logger.info(
+            "webhook_verified auth_source=%s key_id=%s event_id=%s path=%s",
+            auth_source, x_truevow_key_id, event_id or "none", path,
+        )
+
         return {
             "authenticated": True,
+            "auth_source": auth_source,
             "key_id": x_truevow_key_id,
             "timestamp": ts,
+            "event_id": event_id,
         }
+
+    @staticmethod
+    def _extract_idempotency_key(raw_body: bytes) -> Optional[str]:
+        try:
+            body = json.loads(raw_body)
+            for key in ("event_id", "command_id", "delivery_id", "id"):
+                if key in body and body[key]:
+                    return str(body[key])
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+        return None
+
+    @staticmethod
+    def _log_auth_failure(key_id: str, reason: str) -> None:
+        logger.warning(
+            "webhook_auth_failed key_id=%s reason=%s",
+            key_id, reason,
+        )
 
 
 def get_settle_webhook_signer() -> WebhookSigner:

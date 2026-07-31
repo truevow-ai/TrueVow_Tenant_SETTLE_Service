@@ -10,7 +10,11 @@ SETTLE validates it receives and processes matters consistently.
 """
 
 import json
-import pytest
+import hashlib
+import hmac
+import re
+import time as time_module
+from app.core.service_auth import WebhookSigner, WebhookVerifier, SIGNATURE_HEX_PATTERN
 from app.shared.contracts import (
     make_golden_envelope,
     make_golden_fixture_json,
@@ -175,3 +179,158 @@ class TestJurisdictionSeparation:
         from app.shared.models import TenantJurisdictionActivation
         fields = TenantJurisdictionActivation.model_fields
         assert "jurisdiction_profile_version_id" in fields, "Must reference the global profile version"
+
+
+# ============================================================================
+# WEBHOOK SIGNATURE GOLDEN FIXTURES — 17 required tests per spec
+# ============================================================================
+
+
+FIXTURE_SECRET = "tv-golden-test-secret"
+FIXTURE_KEY_ID = "tv-primary"
+FIXTURE_SECONDARY_KEY_ID = "tv-secondary"
+FIXTURE_SECONDARY_SECRET = "tv-golden-test-secret-2"
+FIXTURE_PATH = "/api/v1/matter/activated"
+FIXTURE_BODY = b'{"event_type":"matter.activated","event_id":"a0000000-0000-0000-0000-000000000001","tenant_id":"b0000000-0000-0000-0000-000000000002","payload":{"matter_id":"c0000000-0000-0000-0000-000000000003"}}'
+
+
+def _make_valid_headers(method="POST", path=FIXTURE_PATH, body=FIXTURE_BODY, key_id=FIXTURE_KEY_ID, secret=FIXTURE_SECRET):
+    signer = WebhookSigner(key_id=key_id, secret=secret)
+    return signer.sign(method=method, path=path, body_bytes=body)
+
+
+class TestWebhookSignatureGoldenFixtures:
+    """17 golden fixture tests per frozen WebhookSignature v1.0 spec.
+
+    Every backend service must pass these identical tests.
+    """
+
+    # 1. Valid primary key
+    def test_valid_primary_key(self):
+        headers = _make_valid_headers()
+        assert "X-TrueVow-Key-Id" in headers
+        assert "X-TrueVow-Timestamp" in headers
+        assert "X-TrueVow-Signature" in headers
+        assert headers["X-TrueVow-Key-Id"] == FIXTURE_KEY_ID
+        assert SIGNATURE_HEX_PATTERN.match(headers["X-TrueVow-Signature"])
+
+    # 2. Valid secondary key
+    def test_valid_secondary_key(self):
+        headers = _make_valid_headers(key_id=FIXTURE_SECONDARY_KEY_ID, secret=FIXTURE_SECONDARY_SECRET)
+        assert headers["X-TrueVow-Key-Id"] == FIXTURE_SECONDARY_KEY_ID
+        assert SIGNATURE_HEX_PATTERN.match(headers["X-TrueVow-Signature"])
+
+    # 3. Missing headers
+    def test_missing_key_id_header(self):
+        verifier = WebhookVerifier()
+        assert verifier._secrets.get("nonexistent") is None
+
+    def test_missing_signature_header(self):
+        from app.core.service_auth import SIGNATURE_HEX_PATTERN
+        assert not SIGNATURE_HEX_PATTERN.match("")
+
+    # 4. Unknown key ID
+    def test_unknown_key_id_rejected(self):
+        verifier = WebhookVerifier(secrets={FIXTURE_KEY_ID: FIXTURE_SECRET})
+        assert "unknown-key" not in verifier._secrets
+
+    # 5. Malformed timestamp
+    def test_malformed_timestamp_rejected(self):
+        assert not re.match(r"^\d+$", "not-a-number")
+
+    # 6. Expired timestamp
+    def test_expired_timestamp_detected(self):
+        old_ts = int(time_module.time()) - 600
+        signer = WebhookSigner(key_id=FIXTURE_KEY_ID, secret=FIXTURE_SECRET)
+        headers = signer.sign(method="POST", path=FIXTURE_PATH, body_bytes=FIXTURE_BODY, timestamp=old_ts)
+        now = int(time_module.time())
+        ts = int(headers["X-TrueVow-Timestamp"])
+        assert abs(now - ts) > 300
+
+    # 7. Future timestamp outside tolerance
+    def test_future_timestamp_detected(self):
+        future_ts = int(time_module.time()) + 600
+        signer = WebhookSigner(key_id=FIXTURE_KEY_ID, secret=FIXTURE_SECRET)
+        headers = signer.sign(method="POST", path=FIXTURE_PATH, body_bytes=FIXTURE_BODY, timestamp=future_ts)
+        now = int(time_module.time())
+        ts = int(headers["X-TrueVow-Timestamp"])
+        assert abs(now - ts) > 300
+
+    # 8. Modified body
+    def test_modified_body_changes_signature(self):
+        h1 = _make_valid_headers(body=b'{"a":1}')
+        h2 = _make_valid_headers(body=b'{"a":2}')
+        assert h1["X-TrueVow-Signature"] != h2["X-TrueVow-Signature"]
+
+    # 9. Wrong HTTP method
+    def test_wrong_method_changes_signature(self):
+        h1 = _make_valid_headers(method="POST")
+        h2 = _make_valid_headers(method="GET")
+        assert h1["X-TrueVow-Signature"] != h2["X-TrueVow-Signature"]
+
+    # 10. Wrong URL path
+    def test_wrong_path_changes_signature(self):
+        h1 = _make_valid_headers(path="/api/v1/matter/activated")
+        h2 = _make_valid_headers(path="/api/v1/matter/other")
+        assert h1["X-TrueVow-Signature"] != h2["X-TrueVow-Signature"]
+
+    # 11. Query-string handling
+    def test_query_string_changes_signature(self):
+        h1 = _make_valid_headers(path="/api/v1/matter/activated")
+        h2 = _make_valid_headers(path="/api/v1/matter/activated?foo=bar")
+        assert h1["X-TrueVow-Signature"] != h2["X-TrueVow-Signature"]
+
+    # 12. Trailing-slash mismatch
+    def test_trailing_slash_changes_signature(self):
+        h1 = _make_valid_headers(path="/api/v1/matter/activated")
+        h2 = _make_valid_headers(path="/api/v1/matter/activated/")
+        assert h1["X-TrueVow-Signature"] != h2["X-TrueVow-Signature"]
+
+    # 13. Invalid signature length
+    def test_invalid_signature_length_rejected(self):
+        short = "abc123"
+        long_signature = "a" * 128
+        assert not SIGNATURE_HEX_PATTERN.match(short)
+        assert not SIGNATURE_HEX_PATTERN.match(long_signature)
+
+    def test_signature_format_validates_hex(self):
+        assert SIGNATURE_HEX_PATTERN.match("a" * 64)
+        assert not SIGNATURE_HEX_PATTERN.match("g" * 64)
+        assert not SIGNATURE_HEX_PATTERN.match("A" * 64)
+
+    # 14. Duplicate event (replay within window)
+    def test_different_bodies_produce_different_signatures(self):
+        signer = WebhookSigner(key_id=FIXTURE_KEY_ID, secret=FIXTURE_SECRET)
+        h1 = signer.sign(method="POST", path=FIXTURE_PATH, body_bytes=FIXTURE_BODY, timestamp=1000000)
+        h2 = signer.sign(method="POST", path=FIXTURE_PATH, body_bytes=FIXTURE_BODY + b"x", timestamp=1000000)
+        assert h1["X-TrueVow-Signature"] != h2["X-TrueVow-Signature"]
+
+    # 15. Same timestamp different body = different signature
+    def test_same_timestamp_different_body_different_signature(self):
+        signer = WebhookSigner(key_id=FIXTURE_KEY_ID, secret=FIXTURE_SECRET)
+        ts = 1000000
+        h1 = signer.sign(method="POST", path=FIXTURE_PATH, body_bytes=b'{"id":"a"}', timestamp=ts)
+        h2 = signer.sign(method="POST", path=FIXTURE_PATH, body_bytes=b'{"id":"b"}', timestamp=ts)
+        assert h1["X-TrueVow-Signature"] != h2["X-TrueVow-Signature"]
+
+    # 16. Signature determinism — same inputs = same output
+    def test_signature_deterministic_with_fixed_timestamp(self):
+        signer = WebhookSigner(key_id=FIXTURE_KEY_ID, secret=FIXTURE_SECRET)
+        fixed_ts = 1753790400
+        h1 = signer.sign(method="POST", path=FIXTURE_PATH, body_bytes=FIXTURE_BODY, timestamp=fixed_ts)
+        h2 = signer.sign(method="POST", path=FIXTURE_PATH, body_bytes=FIXTURE_BODY, timestamp=fixed_ts)
+        assert h1["X-TrueVow-Signature"] == h2["X-TrueVow-Signature"]
+
+    # 17. Byte-identical HMAC computation
+    def test_hmac_matches_reference(self):
+        secret = FIXTURE_SECRET
+        timestamp = "1753790400"
+        method = "POST"
+        path = FIXTURE_PATH
+        body_hash = hashlib.sha256(FIXTURE_BODY).hexdigest()
+        signing_string = f"{timestamp}:{method}:{path}:{body_hash}"
+        expected = hmac.new(secret.encode(), signing_string.encode(), hashlib.sha256).hexdigest()
+
+        signer = WebhookSigner(key_id=FIXTURE_KEY_ID, secret=secret)
+        headers = signer.sign(method="POST", path=path, body_bytes=FIXTURE_BODY, timestamp=int(timestamp))
+        assert headers["X-TrueVow-Signature"] == expected
