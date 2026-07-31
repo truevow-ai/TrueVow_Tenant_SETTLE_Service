@@ -1,6 +1,12 @@
 """
 Frozen Shared Contracts — SETTLE Service v1.0.1
 
+Authoritative source: SaaS Admin contract_registry
+Source repository: TrueVow_SaaS_Admin_Service
+Source commit: a18dae1 (pinned — do not change locally)
+Golden-fixture hash: deterministic from make_golden_envelope()
+Canonical-rules hash: from WEBHOOK_SIGNATURE_CANONICAL_RULES
+
 These contracts are frozen. Future incompatible changes require a new version.
 Existing fields must not be renamed in place.
 

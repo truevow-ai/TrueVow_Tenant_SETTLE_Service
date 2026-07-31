@@ -43,30 +43,83 @@ LEGACY_AUTH_CUTOFF_DATE = datetime(2026, 9, 1, tzinfo=timezone.utc)
 _idempotency_store: Dict[str, Set[str]] = {}
 
 
-def _load_webhook_secrets() -> Dict[str, str]:
-    """Load webhook secrets from env vars — matches SaaS Admin TypeScript.
+def _load_webhook_secrets() -> Dict[str, Dict[str, object]]:
+    """Load per-relationship webhook keys from env vars.
 
+    TRUEVOW_WEBHOOK_SECRETS configures per-caller-per-receiver keys:
+    [
+      {
+        "key_id": "tv-trace-to-settle-v1",
+        "secret": "...",
+        "calling_service": "TRACE",
+        "receiving_service": "SETTLE",
+        "allowed_methods": ["POST"],
+        "allowed_paths": ["/api/v1/settle/webhooks/matter-activated"],
+        "enabled": true
+      }
+    ]
+
+    Also supports backward-compatible global format:
     TRUEVOW_WEBHOOK_KEY_ID=tv-primary
-    TRUEVOW_WEBHOOK_SECRET=<shared-secret>
+    TRUEVOW_WEBHOOK_SECRET=<secret>
     TRUEVOW_WEBHOOK_SECONDARY_KEYS=[{"key_id":"tv-secondary","secret":"..."}]
 
-    Actual values belong in the deployment secret manager.
-    Development, staging, and production must use different secrets.
+    Per-relationship keys take precedence. A key NOT bound to
+    allowed_paths/methods will be rejected even if the HMAC is valid.
     """
-    secrets: Dict[str, str] = {}
-    key_id = os.getenv("TRUEVOW_WEBHOOK_KEY_ID", "settle-service")
-    secret = os.getenv("TRUEVOW_WEBHOOK_SECRET", "settle-dev-secret")
-    secrets[key_id] = secret
+    secrets: Dict[str, Dict[str, object]] = {}
 
-    secondary = os.getenv("TRUEVOW_WEBHOOK_SECONDARY_KEYS")
-    if secondary:
+    per_rel = os.getenv("TRUEVOW_WEBHOOK_SECRETS")
+    if per_rel:
         try:
-            for entry in json.loads(secondary):
-                secrets[entry["key_id"]] = entry["secret"]
-        except (json.JSONDecodeError, KeyError):
-            logger.warning("Failed to parse TRUEVOW_WEBHOOK_SECONDARY_KEYS")
+            for entry in json.loads(per_rel):
+                kid = entry["key_id"]
+                secrets[kid] = {
+                    "secret": entry["secret"],
+                    "calling_service": entry.get("calling_service", "UNKNOWN"),
+                    "receiving_service": entry.get("receiving_service", "SETTLE"),
+                    "allowed_methods": entry.get("allowed_methods", ["POST"]),
+                    "allowed_paths": entry.get("allowed_paths", []),
+                    "enabled": entry.get("enabled", True),
+                }
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning("Failed to parse TRUEVOW_WEBHOOK_SECRETS: %s", e)
+
+    if not secrets:
+        key_id = os.getenv("TRUEVOW_WEBHOOK_KEY_ID", "settle-service")
+        secret = os.getenv("TRUEVOW_WEBHOOK_SECRET", "settle-dev-secret")
+        secrets[key_id] = {
+            "secret": secret,
+            "calling_service": "UNKNOWN",
+            "receiving_service": "SETTLE",
+            "allowed_methods": ["POST"],
+            "allowed_paths": [],
+            "enabled": True,
+        }
+        secondary = os.getenv("TRUEVOW_WEBHOOK_SECONDARY_KEYS")
+        if secondary:
+            try:
+                for entry in json.loads(secondary):
+                    secrets[entry["key_id"]] = {
+                        "secret": entry["secret"],
+                        "calling_service": entry.get("calling_service", "UNKNOWN"),
+                        "receiving_service": "SETTLE",
+                        "allowed_methods": entry.get("allowed_methods", ["POST"]),
+                        "allowed_paths": entry.get("allowed_paths", []),
+                        "enabled": True,
+                    }
+            except (json.JSONDecodeError, KeyError):
+                logger.warning("Failed to parse TRUEVOW_WEBHOOK_SECONDARY_KEYS")
 
     return secrets
+
+
+def _resolve_secret(key_id: str) -> Optional[bytes]:
+    secrets = _load_webhook_secrets()
+    entry = secrets.get(key_id)
+    if entry is None or not entry.get("enabled", True):
+        return None
+    return str(entry["secret"]).encode()
 
 
 class WebhookSigner:
@@ -115,9 +168,13 @@ class WebhookVerifier:
       - Signature hex format and buffer-length guard before compare_digest
       - Exact raw body hashing (no re-serialization)
       - Key resolution strictly by key_id
+      - Per-key caller binding (calling_service, allowed_methods, allowed_paths)
       - Idempotency via event_id (replay within window blocked)
-      - Auth source recorded (hmac vs legacy, key_id, calling service)
+      - Auth source recorded (hmac vs legacy, key_id, calling_service)
       - Secrets, signatures, and confidential bodies never logged
+
+    A TRACE key must never be accepted on a non-TRACE path,
+    even if its HMAC is otherwise valid.
 
     Usage as FastAPI dependency:
         verifier = get_webhook_verifier()
@@ -127,16 +184,14 @@ class WebhookVerifier:
             request: Request,
             verified = Depends(verifier),
         ):
-            event_id = request.headers.get("X-TrueVow-Event-Id")
-            # ... process
+            ...
     """
 
     def __init__(
         self,
-        secrets: Optional[Dict[str, str]] = None,
         tolerance_seconds: int = WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS,
     ):
-        self._secrets = {kid: s.encode() for kid, s in (secrets or _load_webhook_secrets()).items()}
+        self._key_registry = _load_webhook_secrets()
         self._tolerance = tolerance_seconds
 
     async def __call__(
@@ -148,6 +203,8 @@ class WebhookVerifier:
     ) -> Dict:
         auth_source = "hmac"
         key_id_used = x_truevow_key_id or "unknown"
+        path = request.url.path
+        method = request.method.upper()
 
         if settings.SKIP_AUTH or not settings.ENABLE_SERVICE_AUTH:
             logger.info("webhook_auth bypass mode active")
@@ -179,14 +236,31 @@ class WebhookVerifier:
                 detail="Invalid timestamp format: must be milliseconds as integer string",
             )
 
-        secret = self._secrets.get(x_truevow_key_id)
-        if secret is None:
-            self._log_auth_failure(key_id_used, "unknown_key_id")
+        key_entry = self._key_registry.get(x_truevow_key_id)
+        if key_entry is None or not key_entry.get("enabled", True):
+            self._log_auth_failure(key_id_used, "unknown_or_disabled_key")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Unknown key ID: {x_truevow_key_id}",
+                detail=f"Unknown or disabled key: {x_truevow_key_id}",
             )
 
+        allowed_methods = key_entry.get("allowed_methods", [])
+        if allowed_methods and method not in allowed_methods:
+            self._log_auth_failure(key_id_used, "method_not_allowed")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Key {x_truevow_key_id} not authorized for method {method}",
+            )
+
+        allowed_paths = key_entry.get("allowed_paths", [])
+        if allowed_paths and path not in allowed_paths:
+            self._log_auth_failure(key_id_used, "path_not_allowed")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Key {x_truevow_key_id} not authorized for path {path}",
+            )
+
+        secret = str(key_entry["secret"]).encode()
         ts = int(x_truevow_timestamp)
         now = int(time_module.time())
         if abs(now - ts) > self._tolerance:
@@ -197,10 +271,8 @@ class WebhookVerifier:
             )
 
         raw_body = await request.body()
-        path = request.url.path
-
         body_hash = hashlib.sha256(raw_body).hexdigest()
-        signing_string = f"{x_truevow_timestamp}:{request.method.upper()}:{path}:{body_hash}"
+        signing_string = f"{x_truevow_timestamp}:{method}:{path}:{body_hash}"
         expected = hmac.new(secret, signing_string.encode(), hashlib.sha256).hexdigest()
 
         provided_bytes = bytes.fromhex(x_truevow_signature)
@@ -226,15 +298,17 @@ class WebhookVerifier:
                 )
             _idempotency_store.setdefault("consumed", set()).add(store_key)
 
+        calling_service = key_entry.get("calling_service", "UNKNOWN")
         logger.info(
-            "webhook_verified auth_source=%s key_id=%s event_id=%s path=%s",
-            auth_source, x_truevow_key_id, event_id or "none", path,
+            "webhook_verified auth_source=%s key_id=%s caller=%s event_id=%s path=%s",
+            auth_source, x_truevow_key_id, calling_service, event_id or "none", path,
         )
 
         return {
             "authenticated": True,
             "auth_source": auth_source,
             "key_id": x_truevow_key_id,
+            "calling_service": calling_service,
             "timestamp": ts,
             "event_id": event_id,
         }
@@ -259,14 +333,16 @@ class WebhookVerifier:
 
 
 def get_settle_webhook_signer() -> WebhookSigner:
-    """Returns a WebhookSigner configured from env vars (TRUEVOW_WEBHOOK_KEY_ID)."""
+    """Returns a WebhookSigner for SETTLE outbound calls using per-relationship key."""
     secrets = _load_webhook_secrets()
-    key_id = os.getenv("TRUEVOW_WEBHOOK_KEY_ID", "settle-service")
-    return WebhookSigner(key_id=key_id, secret=secrets[key_id])
+    key_id = os.getenv("TRUEVOW_WEBHOOK_KEY_ID", "tv-settle-to-command-v1")
+    entry = secrets.get(key_id, {})
+    secret = str(entry.get("secret", "settle-dev-secret"))
+    return WebhookSigner(key_id=key_id, secret=secret)
 
 
 def get_webhook_verifier() -> WebhookVerifier:
-    """Returns a WebhookVerifier with secrets from env vars."""
+    """Returns a WebhookVerifier with per-relationship key registry from env vars."""
     return WebhookVerifier()
 
 

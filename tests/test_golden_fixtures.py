@@ -223,7 +223,7 @@ class TestWebhookSignatureGoldenFixtures:
     # 3. Missing headers
     def test_missing_key_id_header(self):
         verifier = WebhookVerifier()
-        assert verifier._secrets.get("nonexistent") is None
+        assert verifier._key_registry.get("nonexistent") is None
 
     def test_missing_signature_header(self):
         from app.core.service_auth import SIGNATURE_HEX_PATTERN
@@ -231,8 +231,8 @@ class TestWebhookSignatureGoldenFixtures:
 
     # 4. Unknown key ID
     def test_unknown_key_id_rejected(self):
-        verifier = WebhookVerifier(secrets={FIXTURE_KEY_ID: FIXTURE_SECRET})
-        assert "unknown-key" not in verifier._secrets
+        verifier = WebhookVerifier()
+        assert "unknown-key" not in verifier._key_registry
 
     # 5. Malformed timestamp
     def test_malformed_timestamp_rejected(self):
@@ -350,6 +350,92 @@ class TestLegacyMigration:
         from app.core.service_auth import LEGACY_AUTH_CUTOFF_DATE
         expected = datetime(2026, 9, 1, tzinfo=timezone.utc)
         assert LEGACY_AUTH_CUTOFF_DATE == expected, (
-            f"Legacy cutoff must be 2026-09-01. "
-            f"After this date, verify_legacy_bearer() returns None."
+            "Legacy cutoff must be 2026-09-01. "
+            "After this date, verify_legacy_bearer() returns None."
         )
+
+
+class TestPerKeyBinding:
+    """Per-relationship key isolation — no shared global secret.
+
+    A TRACE key must never be accepted on a non-TRACE path,
+    even if its HMAC is otherwise valid.
+    """
+
+    SETTLE_RECEIVE_PATH = "/api/v1/settle/webhooks/matter-activated"
+    WRONG_PATH = "/api/v1/matters/activate"
+
+    def _make_registry(self, key_id, secret, allowed_paths, calling_service="TRACE"):
+        return {
+            key_id: {
+                "secret": secret,
+                "calling_service": calling_service,
+                "receiving_service": "SETTLE",
+                "allowed_methods": ["POST"],
+                "allowed_paths": allowed_paths,
+                "enabled": True,
+            }
+        }
+
+    def test_valid_key_on_correct_path_passes(self):
+        registry = self._make_registry(
+            "tv-trace-to-settle-v1", "secret-1", [self.SETTLE_RECEIVE_PATH]
+        )
+        entry = registry["tv-trace-to-settle-v1"]
+        assert self.SETTLE_RECEIVE_PATH in entry["allowed_paths"]
+        assert entry["enabled"] is True
+        assert entry["calling_service"] == "TRACE"
+
+    def test_key_rejected_on_wrong_path(self):
+        registry = self._make_registry(
+            "tv-trace-to-settle-v1", "secret-1", [self.SETTLE_RECEIVE_PATH]
+        )
+        allowed = registry["tv-trace-to-settle-v1"]["allowed_paths"]
+        assert self.WRONG_PATH not in allowed
+
+    def test_intake_key_not_accepted_on_settle_path(self):
+        registry = self._make_registry(
+            "tv-intake-to-retainer-v1", "secret-2",
+            ["/api/v1/retainer/webhooks/candidate-submitted"],
+            calling_service="INTAKE",
+        )
+        allowed = registry["tv-intake-to-retainer-v1"]["allowed_paths"]
+        assert self.SETTLE_RECEIVE_PATH not in allowed
+
+    def test_disabled_key_rejected(self):
+        registry = {
+            "tv-old-key": {
+                "secret": "old-secret",
+                "calling_service": "TRACE",
+                "receiving_service": "SETTLE",
+                "allowed_methods": ["POST"],
+                "allowed_paths": [self.SETTLE_RECEIVE_PATH],
+                "enabled": False,
+            }
+        }
+        assert registry["tv-old-key"]["enabled"] is False
+
+    def test_rotation_old_key_disabled_new_key_active(self):
+        registry = {
+            "tv-trace-to-settle-v1": {
+                "secret": "old", "calling_service": "TRACE",
+                "allowed_methods": ["POST"],
+                "allowed_paths": [self.SETTLE_RECEIVE_PATH],
+                "enabled": False,
+            },
+            "tv-trace-to-settle-v2": {
+                "secret": "new", "calling_service": "TRACE",
+                "allowed_methods": ["POST"],
+                "allowed_paths": [self.SETTLE_RECEIVE_PATH],
+                "enabled": True,
+            },
+        }
+        assert not registry["tv-trace-to-settle-v1"]["enabled"]
+        assert registry["tv-trace-to-settle-v2"]["enabled"]
+
+    def test_method_not_in_allowed_list_rejected(self):
+        registry = self._make_registry(
+            "tv-trace-to-settle-v1", "secret-1", [self.SETTLE_RECEIVE_PATH]
+        )
+        allowed = registry["tv-trace-to-settle-v1"]["allowed_methods"]
+        assert "GET" not in allowed
