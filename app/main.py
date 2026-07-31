@@ -84,3 +84,22 @@ async def health():
         "version": settings.SERVICE_VERSION,
         "environment": settings.environment
     }
+
+
+@app.get("/ready")
+async def ready():
+    """
+    Readiness check — database, migrations, critical tables.
+
+    Separated from /health so load balancers can distinguish:
+      /health — process is alive (always responds)
+      /ready  — database reachable, migrations current, tables present
+
+    Returns 200 if ready, 503 if not ready.
+    """
+    from fastapi.responses import JSONResponse
+    from app.core.readiness import check_readiness
+
+    result = await check_readiness()
+    status_code = 200 if result["ready"] else 503
+    return JSONResponse(content=result, status_code=status_code)

@@ -79,7 +79,7 @@ def init_observability(
 
     # --- Auto-instrumentation ---
     if app and enable_traces:
-        FastAPIInstrumentor.instrument_app(app, excluded_urls="/health,/metrics,/")
+        FastAPIInstrumentor.instrument_app(app, excluded_urls="/health,/ready,/metrics,/")
 
     try:
         SQLAlchemyInstrumentor().instrument(enable_commenter=True)
