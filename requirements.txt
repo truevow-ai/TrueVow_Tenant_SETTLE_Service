@@ -41,7 +41,6 @@ botocore==1.35.99
 stripe==11.3.0
 
 # Monitoring (Phase 2)
-sentry-sdk[fastapi]==2.19.2
 
 # Numerical computing (settlement estimator / analytics)
 numpy==2.2.1
