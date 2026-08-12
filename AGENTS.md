@@ -44,6 +44,15 @@ python ../TrueVow_Shared_Orchestration/orchestrator.py dispatch "<user's request
 - Scan new skills: `skillspector scan <path> --no-llm`
 - Web research: `agent-reach doctor` for status
 
+### Skill Reference
+Two families via `orchestrator.py dispatch` or `/truevow-ask`:
+| Task | Skill |
+|------|-------|
+| Review code | `/code-review` (Pocock) |
+| Write tests | `/tdd` (Pocock) |
+| Security | `/security-and-hardening` (TrueVow — bar-compliant anonymization) |
+| Deploy | `/shipping-and-launch` (TrueVow) |
+
 **Reminder:** 12 of 13 services are currently STALE (>24h without agent activity). Write back to prove this one is alive. The CTO dashboard refreshes every scan.
 
 
