@@ -54,23 +54,48 @@ python ../TrueVow_Shared_Orchestration/orchestrator.py dispatch "<user's request
 > Add service-specific rules below. The ecosystem preamble above is auto-generated
 > and wires this agent into the TrueVow Agent Ecosystem.
 
-## WebhookSignature v1.0 — SETTLE Responsibilities (frozen contract)
+## TRACE → SETTLE FUTURE-BOUNDARY OVERRIDE (OWNER-RATIFIED 2026-08-30)
+
+For the future TRACE → SETTLE settlement-context boundary, the controlling planning baseline is:
+
+`docs/00-Planning/SETTLE-TRACE-HANDOFF-PLANNING-BASELINE.md`
+
+The repository contains older/as-built integration artifacts that describe
+`POST /settle/webhooks/matter-activated` as receiving `matter.activated` from TRACE.
+Those artifacts remain evidence of historical/current implementation state, but they are
+**not architecture authority for the mature TRACE → SETTLE boundary**.
+
+Binding rules:
+
+- Matter activation starts TRACE development; it must not be assumed to start substantive SETTLE resolution.
+- No agent may independently freeze the future TRACE → SETTLE event name, payload/schema, required fields, authority, transition, privacy classification, versioning, idempotency, or receiver semantics.
+- `TRACE-STL-001` is a two-sided TRACE/SETTLE ontology + contract reconciliation gate.
+- TRACE must not independently define what SETTLE consumes; SETTLE must not independently dictate what TRACE stores.
+- The target is the **smallest useful, governed, de-identified settlement-context projection** consistent with the approved product-ownership boundary.
+- `trace.settlement_context_ready` is **PROVISIONAL ONLY** until STL-001 completes.
+- Any reuse, compatibility period, retirement, or migration of the legacy `matter.activated` path must be decided explicitly during STL-001 and contract-tested on both sides.
+
+The legacy block below is therefore preserved as repository/as-built evidence. Where it
+conflicts with the future-boundary baseline above, the baseline governs planning and no
+new implementation may be derived from the legacy statement until STL-001 reconciliation.
+
+## WebhookSignature v1.0 — SETTLE Responsibilities (legacy/as-built contract evidence)
 
 SETTLE is primarily a **verifier** of incoming webhooks and a **signer** of outbound
 cross-service calls.
 
-### Canonical paths SETTLE verifies:
+### Canonical paths SETTLE verifies (legacy/as-built; future boundary subject to STL-001):
 - `POST /settle/webhooks/matter-activated` — receives matter.activated from TRACE
 
 ### Canonical paths SETTLE signs:
 - `POST /settle/webhooks/resolution-update` — notifies COMMAND of resolution status changes
 
-### Authoritative contract location:
+### Authoritative contract location for the legacy/as-built contract:
 - Contract: `app/shared/contracts.py` (CONTRACT_VERSIONS, golden fixtures)
 - Signing/verification: `app/core/service_auth.py` (WebhookSigner, WebhookVerifier)
 - Golden tests: `tests/test_golden_fixtures.py` (17 webhook tests)
 
-### Frozen contracts SETTLE must comply with:
+### Frozen contracts SETTLE must comply with (for the existing implemented contract until explicitly migrated):
 | Contract | Version | SETTLE Role |
 |---|---|---|
 | WebhookSignature | v1.0 | Sign + Verify |
