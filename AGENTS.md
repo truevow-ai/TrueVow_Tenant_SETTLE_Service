@@ -152,3 +152,69 @@ There is no circumstance under which it is relaxed.**
 
 **If you are ever tempted to loosen this to make numbers look better: don't.
 Re-read this rule. The answer is no.**
+
+---
+
+## External engineering skills
+
+Installed repo-local engineering skills (Matt Pocock family) are
+subordinate execution methodology only.
+
+They are NOT architecture authority, product authority, financial
+authority, maturity classification, ticket authority, or merge authority.
+
+Precedence for this repository is:
+
+1. AGENTS.md and explicit repository governance
+2. TrueVow Agent Ecosystem orchestrator / financial invariants
+3. canonical SETTLE architecture, domain model and completion-ledger
+   state
+4. explicit task / control-plane instructions
+5. external engineering skills
+6. model defaults
+
+External skills may assist with diagnosis, TDD, review, research, domain
+analysis, codebase analysis, merge-conflict resolution, and bounded
+implementation methodology.
+
+External skills MUST NOT independently:
+
+- redesign SETTLE or change service boundaries;
+- change the SETTLE ontology or create canonical events/contracts;
+- create or modify migrations or schema;
+- alter TRACE -> SETTLE handoff contracts;
+- move Customer Portal UI ownership into SETTLE;
+- create duplicate contribution or case-bank authority;
+- weaken privacy, provenance, or verification;
+- change APPROVED / ANALYTICS_ELIGIBLE classification;
+- introduce black-box settlement scoring or recommend accept/reject;
+- expose raw PHI or direct identifiers;
+- modify canonical governance merely because a skill recommends it.
+
+Specific skill constraints:
+
+- `research` may investigate primary sources but must not automatically
+  write canonical findings or docs unless the delegated task explicitly
+  authorizes repository writes.
+- `domain-modeling` is advisory unless explicitly authorized and must not
+  automatically create or rewrite CONTEXT.md, DOMAIN_LANGUAGE.md, ontology,
+  or ADRs.
+- `codebase-design` must not opportunistically redesign BUILT/PROVEN
+  foundations.
+- `tdd` tests must follow established production semantics; do not modify
+  fixtures merely to obtain green tests.
+- `diagnosing-bugs` requires premise falsification; if evidence disproves
+  the task premise, STOP rather than coding around it.
+- `code-review` treats passing tests as evidence, not final acceptance.
+- `setup-matt-pocock-skills` is installed but must NOT be executed; it
+  must not reorganize docs, create issue-tracker policy or labels, or
+  rewrite repository governance.
+
+The SETTLE CTO / control plane remains final sequencing and acceptance
+authority.
+
+When an external skill conflicts with repository governance, repository
+governance wins.
+
+When the conflict cannot be resolved mechanically, STOP and request
+control-plane review.
