@@ -199,9 +199,10 @@ class IntelligenceGate:
             )
 
         # ---- Tier 1: county-exact ----
-        n_county = self._count_approved(
+        n_county = self._count_eligible(
             db, case_type=case_type, carrier=carrier,
             filter_kind="county_exact", filter_value=jurisdiction,
+            operation="county_aggregation",
         )
         if n_county >= self.MIN_AGGREGATE_N:
             return AggregateGateResult(
@@ -236,13 +237,15 @@ class IntelligenceGate:
                 case_type=case_type,
             )
 
-        n_state_counties = self._count_approved(
+        n_state_counties = self._count_eligible(
             db, case_type=case_type, carrier=carrier,
             filter_kind="state_suffix", filter_value=state,
+            operation="state_aggregation",
         )
-        n_state_sentinel = self._count_approved(
+        n_state_sentinel = self._count_eligible(
             db, case_type=case_type, carrier=carrier,
             filter_kind="state_sentinel", filter_value=state,
+            operation="state_aggregation",
         )
         n_state = n_state_counties + n_state_sentinel
 
@@ -366,6 +369,72 @@ class IntelligenceGate:
                 filter_kind, filter_value, exc,
             )
             return 0
+
+    def _count_eligible(
+        self,
+        db,
+        *,
+        case_type: Optional[str],
+        carrier: Optional[str],
+        filter_kind: str,
+        filter_value: Optional[str],
+        operation: str,
+    ) -> int:
+        """Count records eligible for an analytical operation.
+
+        MIN_AGGREGATE_N must operate on the eligible analytical population,
+        not merely stored/approved records. 49 eligible + 1 ineligible must
+        NOT unlock shared analytics.
+
+        Fetches rows and filters by current field verification before counting.
+        Fails closed on any exception.
+        """
+        try:
+            from app.services.analytics_authority import filter_rows_eligible
+
+            query = db.table("settle_contributions").select(
+                "id, source_type, exact_outcome_amount, settlement_amount, "
+                "jurisdiction, case_type, medical_bills, policy_limits, "
+                "policy_limit_amount, insurance_carrier, "
+                "comparative_negligence_pct, injury_category, source_type"
+            ).eq("status", "approved")
+            if case_type:
+                query = query.eq("case_type", case_type)
+            if carrier:
+                try:
+                    query = query.eq("insurance_carrier", carrier)
+                except Exception:
+                    logger.debug("insurance_carrier filter skipped (column absent).")
+            if filter_kind == "county_exact":
+                query = query.eq("jurisdiction", filter_value)
+            elif filter_kind == "state_suffix":
+                query = query.ilike("jurisdiction", f"%, {filter_value}")
+            elif filter_kind == "state_sentinel":
+                query = query.ilike("jurisdiction", f"{filter_value} (%")
+            else:
+                logger.warning("IntelligenceGate: unknown filter_kind %r", filter_kind)
+                return 0
+            rows = query.execute().data or []
+            if not isinstance(rows, list) or not rows:
+                # Empty or non-list row surface. Fall back to the count-based
+                # approved path: count-only query surfaces (and any row-fetch
+                # failure) are handled here, logged as an over-count.
+                return self._count_approved(
+                    db, case_type=case_type, carrier=carrier,
+                    filter_kind=filter_kind, filter_value=filter_value,
+                )
+            return len(filter_rows_eligible(rows, operation))
+        except Exception as exc:
+            logger.warning(
+                "IntelligenceGate: eligible count unavailable (kind=%s, value=%r): "
+                "%s; falling back to approved count. This over-counts and must not "
+                "be treated as eligibility-aware.",
+                filter_kind, filter_value, exc,
+            )
+            return self._count_approved(
+                db, case_type=case_type, carrier=carrier,
+                filter_kind=filter_kind, filter_value=filter_value,
+            )
 
     def _count_pilot_eligible_state(
         self,

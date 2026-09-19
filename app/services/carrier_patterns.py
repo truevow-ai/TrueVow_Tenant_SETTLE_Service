@@ -114,6 +114,14 @@ async def get_carrier_patterns(
             case_type=case_type,
         )
 
+    # Carrier-pattern statistics must describe the eligible analytical
+    # population, not merely stored/approved rows. A row that is approved but
+    # whose required dimensions (jurisdiction, case_type, insurance_carrier)
+    # are not currently verified must not contribute to case_count, median,
+    # percentiles, settlement_rate, trial_rate or lowball_indicator.
+    from app.services.analytics_authority import filter_rows_eligible
+    rows = filter_rows_eligible(rows, "carrier_patterns")
+
     # Group by defendant_category + defendant_industry
     groups: Dict[str, List[dict]] = {}
     for row in rows:

@@ -152,3 +152,171 @@ There is no circumstance under which it is relaxed.**
 
 **If you are ever tempted to loosen this to make numbers look better: don't.
 Re-read this rule. The answer is no.**
+
+---
+
+## RULE 1 — AGENT OUTPUT LANGUAGE (NON-NEGOTIABLE)
+
+**All human-readable communication produced by any SETTLE coding agent MUST be in English.**
+
+This requirement applies to every user-visible message, including:
+- reasoning summaries and progress reports
+- task status and terminal summaries
+- findings, explanations, recommendations, and questions
+- error reports and diagnostics
+- evidence-pack prose, Markdown documentation, ticket reports, and review reports
+
+Repository source material may contain other languages and may be quoted when
+necessary as evidence, but the agent's **explanation** of that evidence MUST be in
+English.
+
+### Two independent checks — BOTH must pass
+
+1. **ARTIFACT LANGUAGE** — are files created or modified by the task written in English?
+2. **AGENT RESPONSE LANGUAGE** — is every human-readable message emitted by the
+   coding agent itself written in English?
+
+Checking whether repository files contain non-ASCII or Chinese characters does
+NOT satisfy this requirement. Those are different questions.
+
+### Final gate before emitting any user-visible response
+
+```
+OUTPUT_LANGUAGE_GATE
+required_language = English
+```
+
+If the proposed response contains Chinese-language explanatory prose, translate
+or rewrite the entire response into English BEFORE emitting it.
+
+Do not report that the output is English unless the actual response being
+delivered to the user is itself in English.
+
+### Do not switch languages based on
+
+- detected repository content
+- terminal locale
+- operating-system locale
+- file encoding
+- source-language detection
+- previous tool output
+- model-generated intermediate reasoning
+
+The user's working language for this repository is English.
+
+### Failure condition
+
+Any agent-authored Chinese prose in a user-visible response is an output contract
+failure.
+
+### When reporting completion, include
+
+```
+AGENT_RESPONSE_LANGUAGE = ENGLISH
+GENERATED_ARTIFACT_LANGUAGE = ENGLISH
+```
+
+These statements must describe the actual emitted response and artifacts, not
+merely a character scan of repository files.
+
+---
+
+## RULE 2 — REPOSITORY HYGIENE: DO NOT RENAME MISLABELED FILES
+
+`docs/00-Planning/TrueVow_SETTLE_Final_Boundary_Corrected_Plan.md` and
+`docs/00-Planning/TrueVow_SETTLE_Final_Product_Implementation_Plan_v3_RERENDERED.md`
+are **DOCX/ZIP files with a `.md` extension**, not Markdown.
+
+A `.md` file that actually contains binary OOXML data breaks glob, grep, and any
+document scan that trusts the extension. The correct `.docx` files exist beside
+them.
+
+**Do not rename them during a reconciliation run.** Renaming is a repository
+modification and must be done deliberately, as its own change, with owner review —
+not mixed into read-only work.
+
+---
+
+## RULE 3 — DATABASE GOVERNANCE (NON-NEGOTIABLE)
+
+**All SETTLE database changes go through the EXISTING SETTLE Supabase database and
+its existing migration/governance system. Do not create another database for new
+settlement capabilities.**
+
+### Intended architecture
+
+```text
+Customer Portal
+     │
+     │ attorney UI / external case entry
+     ▼
+SETTLE APIs
+     │
+     │ validation + business rules
+     ▼
+EXISTING SETTLE SUPABASE DATABASE
+     │
+     ├── existing settlement domain
+     ├── existing case bank
+     ├── existing contributions
+     ├── existing offers / negotiations
+     ├── existing liens / resolution
+     └── necessary governed extensions
+```
+
+### 1. REUSE BEFORE ADDING
+
+Before creating any table or column, the coding agent must PROVE that the existing
+SETTLE schema/model cannot represent the requirement. REC-000 has already shown why
+this matters — capabilities that existed were initially mistaken for gaps. Do not
+repeat that mistake.
+
+### 2. EXTEND THE EXISTING SETTLE DATABASE WHEN GENUINELY NECESSARY
+
+Launch-grade historical contributions may eventually require additional provenance,
+verification, analytics-eligibility or evidence relationships. If reconciliation
+proves those are missing, add them through normal SETTLE Supabase migrations —
+migration + rollback + RLS/tenant-isolation + tests.
+
+### 3. NO PARALLEL "V3 DATABASE"
+
+Do not create:
+
+```text
+settle_old_database
+settle_v3_database
+historical_contributions_database
+analytics_database
+```
+
+Unnecessary complexity for the current product. A separately governed data plane
+is permitted only if a genuine scale/security reason arises someday.
+
+### 4. DO NOT DUPLICATE TRACE DATA IN SETTLE
+
+SETTLE may persist the smallest governed settlement-context projection it legitimately
+needs. It must NOT copy TRACE's medical chronology, raw PHI, evidence documents,
+treatment records, liability evidence, etc. into its database simply because the
+Customer Portal needs to display something.
+
+### 5. CUSTOMER PORTAL IS NOT ANOTHER SETTLEMENT DATABASE
+
+The portal presents the UI and sends commands. Canonical SETTLE information stays
+in SETTLE's existing Supabase database.
+
+### 6. C12's `settle_events` TABLE IS NOT PERMISSION TO START USING IT
+
+We still do not know its intended authority. Leave it alone until reconciliation
+establishes what it was supposed to do. No writer. No drop. No reads from application
+code until disposition is established.
+
+### Required implementation sequence
+
+> Existing SETTLE Supabase → inspect existing schema → reuse existing entities →
+> extend only where proven necessary → migration + rollback + RLS/tenant-isolation
+> + tests → no duplicate database.
+
+That applies particularly to the new launch requirement for external/historical
+settlement contributions. If database changes are genuinely required to make those
+contributions evidence-backed and trustworthy, make those changes properly within
+the existing SETTLE Supabase architecture.

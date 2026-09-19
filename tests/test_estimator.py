@@ -15,7 +15,13 @@ from app.models.case_bank import EstimateRequest, SettleContribution
 def _make_test_cases(n=25, jurisdiction="Maricopa County, AZ", case_type="Auto Accident"):
     cases = []
     ranges = ["$50k-$100k", "$100k-$150k", "$150k-$225k", "$225k-$300k", "$300k-$600k"]
+    range_amount = {
+        "$50k-$100k": 75000.0, "$100k-$150k": 125000.0,
+        "$150k-$225k": 187500.0, "$225k-$300k": 262500.0,
+        "$300k-$600k": 450000.0,
+    }
     for i in range(n):
+        bucket = ranges[i % len(ranges)]
         cases.append(SettleContribution(
             id=uuid4(),
             jurisdiction=jurisdiction,
@@ -30,12 +36,14 @@ def _make_test_cases(n=25, jurisdiction="Maricopa County, AZ", case_type="Auto A
             policy_limits="$100k/$300k",
             defendant_category="Business",
             outcome_type="Settlement",
-            outcome_amount_range=ranges[i % len(ranges)],
+            outcome_amount_range=bucket,
+            exact_outcome_amount=range_amount[bucket],
             contributed_at=datetime.now(UTC) - timedelta(days=i * 10),
             blockchain_hash=f"test_hash_{i}",
             consent_confirmed=True,
             contributor_api_key_id=uuid4(),
             founding_member=True,
+            source_type="scraped_verdict",
             created_at=datetime.now(UTC) - timedelta(days=i * 10),
             updated_at=datetime.now(UTC) - timedelta(days=i * 10),
             status="approved",
@@ -181,11 +189,13 @@ def _build_contribution(idx: int, *, narrative: bool):
             "$50k-$100k", "$100k-$150k", "$150k-$225k",
             "$225k-$300k", "$300k-$600k",
         ][idx % 5],
+        exact_outcome_amount=40000.0 + idx * 1000,
         contributed_at=datetime.now(UTC) - timedelta(days=idx * 5),
         blockchain_hash=f"h{idx}",
         consent_confirmed=True,
         contributor_api_key_id=uuid4(),
         founding_member=True,
+        source_type="scraped_verdict",
         created_at=datetime.now(UTC) - timedelta(days=idx * 5),
         updated_at=datetime.now(UTC) - timedelta(days=idx * 5),
         status="approved",

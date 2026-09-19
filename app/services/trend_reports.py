@@ -146,6 +146,14 @@ class TrendReportGenerator:
         prev_result = db.table("settle_contributions").select("*").eq("status", "approved").gte("created_at", prev_quarter_start.isoformat()).lte("created_at", f"{prev_quarter_end.isoformat()}T23:59:59").execute()
         prev_rows = prev_result.data or []
 
+        # Overall stats must describe the ANALYTICAL population, not merely the
+        # stored/approved population. A row that is approved but whose required
+        # dimensions are not currently verified must not count toward
+        # contributions, contributors, volume rankings or growth rates.
+        from app.services.analytics_authority import filter_rows_eligible
+        current_rows = filter_rows_eligible(current_rows, "quarterly_report")
+        prev_rows = filter_rows_eligible(prev_rows, "quarterly_report")
+
         # Overall stats
         total_contributions = len(current_rows)
         active_contributors = len(set(r.get("contributor_user_id") for r in current_rows if r.get("contributor_user_id")))
@@ -218,6 +226,9 @@ class TrendReportGenerator:
         prev_rows: List[dict],
     ) -> List[InjuryTypeTrend]:
         """Calculate injury type trend data."""
+        from app.services.analytics_authority import filter_rows_eligible
+        current_rows = filter_rows_eligible(current_rows, "trend_injury")
+        prev_rows = filter_rows_eligible(prev_rows, "trend_injury")
         # Group by injury type
         injury_data: Dict[str, List[dict]] = {}
         for row in current_rows:
@@ -277,6 +288,9 @@ class TrendReportGenerator:
         prev_rows: List[dict],
     ) -> List[JurisdictionTrend]:
         """Calculate jurisdiction trend data."""
+        from app.services.analytics_authority import filter_rows_eligible
+        current_rows = filter_rows_eligible(current_rows, "trend_jurisdiction")
+        prev_rows = filter_rows_eligible(prev_rows, "trend_jurisdiction")
         jurisdiction_data: Dict[str, List[dict]] = {}
         for row in current_rows:
             j = row.get("jurisdiction", "Unknown")
@@ -333,6 +347,8 @@ class TrendReportGenerator:
         current_rows: List[dict],
     ) -> List[CarrierCategoryTrend]:
         """Calculate carrier category trend data."""
+        from app.services.analytics_authority import filter_rows_eligible
+        current_rows = filter_rows_eligible(current_rows, "trend_carrier")
         carrier_data: Dict[str, List[dict]] = {}
         for row in current_rows:
             cat = row.get("defendant_category", "Unknown")
@@ -395,6 +411,12 @@ class TrendReportGenerator:
         else:
             result = db.table("settle_contributions").select("jurisdiction").eq("status", "approved").execute()
             rows = result.data or []
+
+        # Coverage-gap statistics must count the eligible population, not merely
+        # approved rows. A jurisdiction with 49 eligible + 1 ineligible approved
+        # record must not be reported as coverage-adequate.
+        from app.services.analytics_authority import filter_rows_eligible
+        rows = filter_rows_eligible(rows, "coverage_gap")
 
         jurisdiction_counts: Dict[str, int] = {}
         for row in rows:

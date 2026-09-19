@@ -27,7 +27,14 @@ def _make_test_contributions(n=25, jurisdiction="Duval County, FL", case_type="M
     from datetime import datetime, timedelta, UTC
     cases = []
     ranges = ["$50k-$100k", "$100k-$150k", "$150k-$225k", "$225k-$300k", "$300k-$600k"]
+    # Midpoints so exact_outcome_amount sits inside its own bucket.
+    range_amount = {
+        "$50k-$100k": 75000.0, "$100k-$150k": 125000.0,
+        "$150k-$225k": 187500.0, "$225k-$300k": 262500.0,
+        "$300k-$600k": 450000.0,
+    }
     for i in range(n):
+        bucket = ranges[i % len(ranges)]
         cases.append(SettleContribution(
             id=uuid4(), jurisdiction=jurisdiction, case_type=case_type,
             injury_category=["Spinal Injury"], primary_diagnosis="Spinal Injury",
@@ -35,10 +42,12 @@ def _make_test_contributions(n=25, jurisdiction="Duval County, FL", case_type="M
             imaging_findings=["Herniated Disc"], medical_bills=30000 + i * 2000,
             lost_wages=5000 + i * 1000, policy_limits="$100k/$300k",
             defendant_category="Business", outcome_type="Settlement",
-            outcome_amount_range=ranges[i % len(ranges)],
+            outcome_amount_range=bucket,
+            exact_outcome_amount=range_amount[bucket],
             contributed_at=datetime.now(UTC) - timedelta(days=i * 10),
             blockchain_hash=f"test_hash_{i}", consent_confirmed=True,
             contributor_api_key_id=uuid4(), founding_member=True,
+            source_type="scraped_verdict",
             created_at=datetime.now(UTC) - timedelta(days=i * 10),
             updated_at=datetime.now(UTC) - timedelta(days=i * 10),
             status="approved", rejection_reason=None, is_outlier=False, confidence_score=1.0,

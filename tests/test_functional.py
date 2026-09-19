@@ -41,6 +41,7 @@ def _build_mock_comparable_cases(n: int = 120):
                 created_at=now,
                 updated_at=now,
                 status="approved",
+                source_type="scraped_verdict",
                 confidence_score=1.0,
             )
         )

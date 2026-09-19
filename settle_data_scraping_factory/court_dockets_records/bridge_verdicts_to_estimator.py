@@ -111,6 +111,13 @@ def project(v: dict) -> dict | None:
     ot = _OUTCOME_MAP.get(v.get("outcome_type"))
     if not ct or not ot:
         return None
+    # The ONLY rows this bridge may project are verdicts whose upstream
+    # review_status is 'verified'. A verdict that is pending, needs_review,
+    # rejected or otherwise unverified has NO verification authority and must
+    # never reach the estimator population. Without this guard, the estimator
+    # would treat unreviewed verdicts as verified analytics evidence.
+    if v.get("review_status") != "verified":
+        return None
     amount = v.get("total_verdict") or v.get("settlement_amount")
     if not amount or amount <= 0:
         return None  # no verified amount -> never coerce a band
@@ -144,7 +151,20 @@ def project(v: dict) -> dict | None:
         "status": "approved",
         "consent_confirmed": True,
         "confidence_score": min(1.0, (v.get("validated_field_count") or 0) / 5.0),
-        "case_narrative": json.dumps(v.get("field_evidence") or {}, default=str)[:5000],
+        "case_narrative": json.dumps(
+            {
+                # The upstream review_status is carried inside case_narrative
+                # because settle_contributions has no review_status column. This
+                # is the authoritative verification invariant: analytics_authority
+                # requires it to be 'verified'. Without it, a pending/needs_review
+                # or rejected verdict would be projected into the estimator and
+                # would satisfy source_type='scraped_verdict' + a present amount
+                # while carrying no verification authority at all.
+                "_review_status": v.get("review_status"),
+                "field_evidence": v.get("field_evidence") or {},
+            },
+            default=str,
+        )[:5000],
     }
 
 

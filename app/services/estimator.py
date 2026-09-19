@@ -244,6 +244,26 @@ class SettlementEstimator:
                 )
             comparable_cases = narrative_bearing
 
+        # Step 1.6: analytics eligibility BEFORE calculation.
+        # MIN-N / gate counts are already eligibility-aware via
+        # IntelligenceGate._count_eligible. Comparable retrieval returns approved
+        # rows; percentile, median, confidence, multiplier and distribution
+        # calculations must consume only the eligible population for this
+        # operation. A partially verified case participates where required
+        # dimensions are verified and is excluded where a required dimension is
+        # not. Eligibility filtering happens BEFORE calculation, not after.
+        from app.services.analytics_authority import (
+            filter_rows_eligible,
+        )
+        comparable_cases = filter_rows_eligible(
+            [c.model_dump() if hasattr(c, "model_dump") else c for c in comparable_cases],
+            "comparable_percentile",
+        )
+        comparable_cases = [
+            SettleContribution(**c) if isinstance(c, dict) else c
+            for c in comparable_cases
+        ]
+
         # Step 2: Calculate ranges via percentile method.
         ranges, confidence = self._calculate_percentile_ranges(
             comparable_cases,
