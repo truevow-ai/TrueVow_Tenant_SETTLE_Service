@@ -402,3 +402,258 @@ def filter_rows_eligible(
 ) -> List[Dict[str, Any]]:
     """Filter DB rows to those eligible for an operation, before calculation."""
     return [r for r in rows if row_eligible_for_operation(r, operation)]
+
+
+# ============================================================================
+# SEAM A — AUTHENTICATED PROVENANCE RESOLUTION (T5-D3-TDD-001, tracer bullet 1)
+# ============================================================================
+#
+# A contribution may CLAIM an upstream verdict reference. The claim is NOT
+# authority. Analytics must independently resolve the claimed reference
+# against the CURRENT authoritative settle_verdicts row and verify that the
+# projection faithfully matches it before granting any analytical field
+# VERIFIED status.
+#
+# DB lookup is an ADAPTER OUTSIDE this seam. This module never opens a
+# database connection. authenticate_projection() receives the CURRENT
+# upstream verdict row that an adapter has already resolved.
+#
+# Reference surface: case_narrative structured JSON, key
+# "_upstream_verdict_id". Reserved by bridge_verdicts_to_estimator.py.
+#
+# Slice 1 scope: settlement amount ONLY. No other analytical field is
+# authenticated by this seam. Blanket field verification is the defect this
+# exists to remove.
+
+# Reserved reference key inside case_narrative JSON.
+UPSTREAM_VERDICT_ID_KEY = "_upstream_verdict_id"
+
+# Canonical marker for a bridge-projected row.
+BRIDGED_SOURCE_TYPE = "scraped_verdict"
+
+# Upstream amount selection follows the existing bridge contract
+# (bridge_verdicts_to_estimator.py:121): total_verdict OR settlement_amount.
+# total_verdict is preferred when present, matching project()'s order.
+AMOUNT_SOURCE_FIELDS = ("total_verdict", "settlement_amount")
+
+# Analytical fields that must NEVER be blanket-verified by Seam A.
+NOT_AUTHENTICATED_BY_SEAM_A = (
+    "jurisdiction",
+    "case_type",
+    "medical_bills",
+    "insurance_carrier",
+    "comparative_negligence_pct",
+    "injury_category",
+    "defendant_category",
+)
+
+
+class AuthorityContext:
+    """Authenticated projection result.
+
+    Owns origin/content/evidence validation for one contribution. Built from
+    the CURRENT authoritative upstream verdict row by an adapter outside
+    this seam. Pure predicates in Seam B consume this, never a DB handle.
+    """
+
+    def __init__(
+        self,
+        authenticated: bool,
+        field_states: Dict[str, str],
+        reason: str = "",
+    ):
+        self.authenticated = authenticated
+        self.field_states = field_states
+        self.reason = reason
+
+
+def _extract_upstream_reference(contribution: Dict[str, Any]) -> Optional[str]:
+    """Read the claimed upstream verdict id from case_narrative JSON.
+
+    Returns None when absent or unparseable. Never a default.
+    """
+    narrative = contribution.get("case_narrative")
+    if not isinstance(narrative, str) or not narrative:
+        return None
+    try:
+        import json
+        payload = json.loads(narrative)
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get(UPSTREAM_VERDICT_ID_KEY)
+    return value if isinstance(value, str) and value else None
+
+
+def select_authoritative_amount(
+    upstream: Dict[str, Any],
+) -> Optional[tuple]:
+    """Select the authoritative outcome amount and its source field.
+
+    bridge_verdicts_to_estimator.py:121 — `total_verdict OR settlement_amount`.
+    total_verdict is preferred when present, matching project()'s order. No
+    zero/default behavior. Returns (amount, source_field) or None when no
+    authoritative amount exists or it is not positive. One selection, so the
+    amount and the field it came from cannot drift apart.
+    """
+    for field in AMOUNT_SOURCE_FIELDS:
+        value = upstream.get(field)
+        if value is None:
+            continue
+        try:
+            amount = float(value)
+        except (TypeError, ValueError):
+            continue
+        if amount > 0:
+            return amount, field
+    return None
+
+
+def _field_evidence_supports(upstream: Dict[str, Any], field: str) -> bool:
+    """True when the upstream verdict carries field_evidence for `field`.
+
+    Per-field evidence is the real authority. Record-level review_status is
+    NOT projected onto every field.
+
+    Evidence must satisfy the repository's canonical verdict evidence
+    contract (app/services/verdict_guard.py): the entry must carry a
+    source_url and a snippet, and the authoritative value must appear
+    VERBATIM in that snippet. A truthy source_url plus a truthy snippet is a
+    convenient JSON shape, not evidence — so shape alone must not grant
+    field authority.
+    """
+    evidence = upstream.get("field_evidence")
+    if not isinstance(evidence, dict) or not evidence:
+        return False
+    entry = evidence.get(field)
+    if not isinstance(entry, dict):
+        return False
+    snippet = entry.get("snippet")
+    source_url = entry.get("source_url")
+    if not source_url or not snippet:
+        return False
+    # Reuse the repository's own value-backed rule rather than inventing a
+    # third evidence contract. verdict_guard imports only re/typing, so there
+    # is no import cycle.
+    from app.services.verdict_guard import _value_backed
+
+    return _value_backed(field, entry.get("value"), snippet)
+
+
+def authenticate_projection(
+    contribution: Dict[str, Any],
+    upstream: Dict[str, Any],
+) -> AuthorityContext:
+    """Seam A: authenticate a contribution's claimed upstream verdict.
+
+    Fails closed. Any of these conditions fails authentication:
+
+    - no upstream row;
+    - claimed verdict id does not match the resolved upstream id;
+    - upstream review_status != "verified";
+    - contribution source_type is not the bridge marker;
+    - authoritative amount is absent or not positive;
+    - contribution exact_outcome_amount does not match authoritative amount;
+    - upstream field_evidence does not support the authoritative amount.
+
+    Slice 1 scope: settlement amount ONLY. All other analytical fields are
+    explicitly NOT authenticated.
+    """
+    states: Dict[str, str] = {}
+
+    claimed_id = _extract_upstream_reference(contribution)
+
+    # 1. A claimed reference must resolve to a real CURRENT upstream row.
+    if upstream is None:
+        return AuthorityContext(
+            authenticated=False,
+            field_states=states,
+            reason="no_upstream_row",
+        )
+    upstream_id = upstream.get("id")
+    if not upstream_id:
+        return AuthorityContext(
+            authenticated=False,
+            field_states=states,
+            reason="upstream_row_has_no_id",
+        )
+    if claimed_id is None:
+        return AuthorityContext(
+            authenticated=False,
+            field_states=states,
+            reason="no_claimed_upstream_reference",
+        )
+    if claimed_id != upstream_id:
+        return AuthorityContext(
+            authenticated=False,
+            field_states=states,
+            reason="claimed_reference_does_not_match_upstream",
+        )
+
+    # 2. Upstream must be verified and analytics-eligible.
+    if upstream.get("review_status") != _BRIDGED_UPSTREAM_REVIEW_STATUS:
+        return AuthorityContext(
+            authenticated=False,
+            field_states=states,
+            reason="upstream_not_verified",
+        )
+
+    # 3. The contribution must carry the canonical bridge marker.
+    if contribution.get("source_type") != BRIDGED_SOURCE_TYPE:
+        return AuthorityContext(
+            authenticated=False,
+            field_states=states,
+            reason="source_type_not_bridge_marker",
+        )
+
+    # 4. Authoritative amount per the bridge contract. One selection returns
+    #    both the amount and the upstream field it came from, so the two
+    #    cannot drift apart.
+    selected = select_authoritative_amount(upstream)
+    if selected is None:
+        return AuthorityContext(
+            authenticated=False,
+            field_states=states,
+            reason="no_authoritative_amount",
+        )
+    authoritative_amount, amount_field = selected
+
+    # 5. The projection must faithfully match the authoritative amount.
+    contribution_amount = contribution.get("exact_outcome_amount")
+    try:
+        contribution_amount = float(contribution_amount)
+    except (TypeError, ValueError):
+        return AuthorityContext(
+            authenticated=False,
+            field_states=states,
+            reason="contribution_amount_not_numeric",
+        )
+    if contribution_amount != authoritative_amount:
+        return AuthorityContext(
+            authenticated=False,
+            field_states=states,
+            reason="amount_mismatch",
+        )
+
+    # 6. Upstream field_evidence must support the authoritative amount field.
+    if not _field_evidence_supports(upstream, amount_field):
+        return AuthorityContext(
+            authenticated=False,
+            field_states=states,
+            reason="field_evidence_missing_for_amount",
+        )
+
+    # Authenticated. settlement_amount is the ONLY field verified in slice 1.
+    states["settlement_amount"] = VERIFIED_STATE
+
+    # Explicitly fail closed for every other analytical field. No blanket
+    # verification, no inference from authentication.
+    for field in NOT_AUTHENTICATED_BY_SEAM_A:
+        states[field] = "unsupported"
+
+    return AuthorityContext(
+        authenticated=True,
+        field_states=states,
+        reason="authenticated_settlement_amount",
+    )

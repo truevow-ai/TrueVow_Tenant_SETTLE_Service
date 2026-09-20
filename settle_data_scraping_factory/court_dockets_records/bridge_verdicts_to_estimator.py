@@ -88,6 +88,28 @@ def _band(amount: float) -> str:
     return "$1M+"
 
 
+def _serialize_narrative(payload: dict) -> str:
+    """Serialize the case_narrative payload to VALID, complete JSON.
+
+    Slicing serialized JSON (json.dumps(...)[:5000]) can truncate
+    mid-document and produce unparseable output. That was audit-only before
+    D3, but D3 places the upstream verdict reference inside this same JSON,
+    making truncation authority-critical: a bridged row with large
+    field_evidence would silently lose its provenance reference.
+
+    settle_contributions.case_narrative has no database length constraint —
+    the table schema (database/schemas/settle_supabase.sql) does not contain
+    the column at all, and app/models/case_bank.py declares it as an
+    unconstrained Optional[str]. The 5000-char cap was a bridge self-limit,
+    not a persistence contract.
+
+    Serialize complete valid JSON instead of slicing serialized JSON. The
+    reference is a CLAIM, never authority; analytics must independently
+    dereference it.
+    """
+    return json.dumps(payload, default=str)
+
+
 def _fetch_verdicts(client: httpx.Client) -> list[dict]:
     rows, off = [], 0
     cols = ("id,jurisdiction,case_type,injury_type,outcome_type,total_verdict,"
@@ -151,7 +173,7 @@ def project(v: dict) -> dict | None:
         "status": "approved",
         "consent_confirmed": True,
         "confidence_score": min(1.0, (v.get("validated_field_count") or 0) / 5.0),
-        "case_narrative": json.dumps(
+        "case_narrative": _serialize_narrative(
             {
                 # The upstream review_status is carried inside case_narrative
                 # because settle_contributions has no review_status column. This
@@ -161,10 +183,14 @@ def project(v: dict) -> dict | None:
                 # would satisfy source_type='scraped_verdict' + a present amount
                 # while carrying no verification authority at all.
                 "_review_status": v.get("review_status"),
+                # The upstream verdict id is a CLAIM, not authority. It is
+                # reserved for analytics to resolve against settle_verdicts at
+                # evaluation time. Its mere presence must never grant
+                # verification; analytics must independently dereference it.
+                "_upstream_verdict_id": v.get("id"),
                 "field_evidence": v.get("field_evidence") or {},
             },
-            default=str,
-        )[:5000],
+        ),
     }
 
 
